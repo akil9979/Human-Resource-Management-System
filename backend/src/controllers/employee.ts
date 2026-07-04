@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import User from '../models/user.js';
 import EmployeeProfile from '../models/employeeProfile.js';
+import { spawnNotification } from './notification.js';
 
 // Sequential Employee Login ID Generator
 export const generateEmployeeId = async (
@@ -126,6 +127,21 @@ export const createEmployee = async (req: Request, res: Response) => {
     });
     await profile.save();
 
+    // Notify all Admin & HR users about the new employee
+    try {
+      const adminAndHRUsers = await User.find({ role: { $in: ['Admin', 'HR'] } });
+      for (const recipient of adminAndHRUsers) {
+        await spawnNotification(
+          recipient._id,
+          'New Employee Registered',
+          `A new employee profile has been created for ${firstName} ${lastName} (Login ID: ${loginId}).`,
+          'New_Employee'
+        );
+      }
+    } catch (notifErr) {
+      console.error('Failed to spawn new employee notifications:', notifErr);
+    }
+
     return res.status(201).json({
       status: 'success',
       message: 'Employee created successfully',
@@ -134,6 +150,65 @@ export const createEmployee = async (req: Request, res: Response) => {
         id: user._id,
         email: user.email,
         role: user.role,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: (error as Error).message });
+  }
+};
+
+export const searchEmployees = async (req: Request, res: Response) => {
+  const { name, employeeId, department, designation, page, limit, sortBy, sortOrder } = req.query;
+
+  // Build filters
+  const filter: any = {};
+
+  if (name) {
+    filter.$or = [
+      { firstName: new RegExp(String(name), 'i') },
+      { lastName: new RegExp(String(name), 'i') },
+    ];
+  }
+  if (employeeId) {
+    filter.employeeId = new RegExp(String(employeeId), 'i');
+  }
+  if (department) {
+    filter.department = new RegExp(String(department), 'i');
+  }
+  if (designation) {
+    filter.designation = new RegExp(String(designation), 'i');
+  }
+
+  // Pagination parameters
+  const pageNum = Math.max(1, parseInt(String(page || 1), 10));
+  const limitNum = Math.max(1, parseInt(String(limit || 10), 10));
+  const skip = (pageNum - 1) * limitNum;
+
+  // Sorting parameters
+  const sort: any = {};
+  const allowedSortFields = ['firstName', 'lastName', 'employeeId', 'department', 'designation', 'dateOfJoining'];
+  const sortField = allowedSortFields.includes(String(sortBy)) ? String(sortBy) : 'employeeId';
+  const sortDirection = sortOrder === 'desc' ? -1 : 1;
+  sort[sortField] = sortDirection;
+
+  try {
+    const total = await EmployeeProfile.countDocuments(filter);
+    const profiles = await EmployeeProfile.find(filter)
+      .populate('user', 'email role')
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        employees: profiles,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum),
+        },
       },
     });
   } catch (error) {

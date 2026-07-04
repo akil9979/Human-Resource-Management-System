@@ -1,72 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import ProfilePage from './pages/ProfilePage';
-import AttendancePage from './pages/AttendancePage';
-import LeavesPage from './pages/LeavesPage';
-import DashboardLayout from './layouts/DashboardLayout';
 import { useAuth } from './context/AuthContext';
 import EmployeeCard, { EmployeeData } from './components/EmployeeCard';
 import EmployeeProfileModal from './components/EmployeeProfileModal';
+import StatCard from './components/StatCard';
+import { FullPageSpinner } from './components/LoadingSpinner';
+import { PageSkeleton } from './components/Skeleton';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import NotFoundPage from './pages/NotFoundPage';
+import { getRoleRedirectPath } from './utils/auth';
+import AppLayout from './layouts/AppLayout';
+import AdminLayout from './layouts/AdminLayout';
+import EmployeeLayout from './layouts/EmployeeLayout';
+import ProtectedRoute from './routes/ProtectedRoute';
 
-// Protected Route wrapper component
-interface ProtectedRouteProps {
-  children: React.ReactElement;
-  allowedRoles?: string[];
-}
+// ── Lazy-loaded pages (code splitting) ────────────────────────────────────────
+const LoginPage      = lazy(() => import('./pages/LoginPage'));
+const SignupPage     = lazy(() => import('./pages/SignupPage'));
+const ProfilePage    = lazy(() => import('./pages/ProfilePage'));
+const AttendancePage = lazy(() => import('./pages/AttendancePage'));
+const LeavesPage     = lazy(() => import('./pages/LeavesPage'));
+const PayrollPage    = lazy(() => import('./pages/PayrollPage'));
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { token, user, loading } = useAuth();
+const AuthenticatedRedirect: React.FC = () => {
+  const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-sans">
-        <div className="text-center">
-          <svg className="animate-spin h-8 w-8 text-indigo-500 mx-auto" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="mt-4 text-slate-400 text-sm font-medium">Loading session...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <FullPageSpinner label="Loading session..." />;
 
-  if (!token || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
+  return <Navigate to={user ? getRoleRedirectPath(user.role) : '/login'} replace />;
 };
 
-// Reusable Stat Card
-interface StatCardProps {
-  title: string;
-  value: string;
-  subtext: string;
-  iconBg: string;
-  icon: React.ReactNode;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, subtext, iconBg, icon }) => (
-  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl hover:border-slate-700 transition-all duration-200 group">
-    <div className="flex items-center justify-between">
-      <span className="text-sm font-medium text-slate-400">{title}</span>
-      <div className={`w-10 h-10 ${iconBg} rounded-xl flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform duration-200`}>
-        {icon}
-      </div>
-    </div>
-    <div className="mt-4">
-      <span className="text-3xl font-extrabold text-slate-100 tracking-tight">{value}</span>
-      <p className="mt-1 text-xs text-slate-500 font-medium">{subtext}</p>
-    </div>
-  </div>
-);
+// StatCard is imported from ./components/StatCard
 
 // Dummy Employee JSON Dataset
 const mockEmployees: EmployeeData[] = [
@@ -145,9 +109,29 @@ const mockEmployees: EmployeeData[] = [
 // Mock Dashboard Page components
 const AdminDashboard = () => {
   const { user } = useAuth();
+
+  // Mock attendance bars data (Jan to Jun)
+  const attendanceData = [
+    { month: 'Jan', rate: 92 },
+    { month: 'Feb', rate: 95 },
+    { month: 'Mar', rate: 97 },
+    { month: 'Apr', rate: 94 },
+    { month: 'May', rate: 96 },
+    { month: 'Jun', rate: 98 },
+  ];
+
+  // Mock leave category distribution data
+  const leaveSummaryData = [
+    { label: 'Sick Leaves', days: 32, percentage: 40, color: 'bg-emerald-500' },
+    { label: 'Paid Vacation', days: 25, percentage: 31, color: 'bg-indigo-500' },
+    { label: 'Unpaid Personal', days: 15, percentage: 19, color: 'bg-amber-500' },
+    { label: 'Casual / Maternity', days: 8, percentage: 10, color: 'bg-rose-500' },
+  ];
+
   return (
-    <DashboardLayout title="Admin Overview">
-      <div className="space-y-6">
+    <div className="space-y-6">
+        
+        {/* Banner */}
         <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
@@ -158,11 +142,12 @@ const AdminDashboard = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 5 Stats Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatCard
             title="Total Employees"
             value="142"
-            subtext="+5 new hires this month"
+            subtext="+5 new joiners this month"
             iconBg="bg-indigo-500/10 text-indigo-400"
             icon={
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,9 +156,9 @@ const AdminDashboard = () => {
             }
           />
           <StatCard
-            title="Attendance Rate"
-            value="98.2%"
-            subtext="+0.4% from yesterday"
+            title="Present Today"
+            value="128"
+            subtext="90.1% attendance rate"
             iconBg="bg-emerald-500/10 text-emerald-400"
             icon={
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -182,9 +167,9 @@ const AdminDashboard = () => {
             }
           />
           <StatCard
-            title="Pending Leaves"
-            value="7"
-            subtext="Requires authorization"
+            title="On Leave"
+            value="8"
+            subtext="5 approved, 3 pending"
             iconBg="bg-amber-500/10 text-amber-400"
             icon={
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -193,27 +178,117 @@ const AdminDashboard = () => {
             }
           />
           <StatCard
-            title="Payroll Cycle"
-            value="Processed"
-            subtext="Disbursed on July 1st"
+            title="Absent"
+            value="6"
+            subtext="Requires verification"
             iconBg="bg-rose-500/10 text-rose-400"
             icon={
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
+          />
+          <StatCard
+            title="New Joiners"
+            value="5"
+            subtext="Arriving next week"
+            iconBg="bg-cyan-500/10 text-cyan-400"
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
               </svg>
             }
           />
         </div>
-      </div>
-    </DashboardLayout>
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* Chart 1: Monthly Attendance (Vertical Bar Chart) */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl flex flex-col justify-between min-h-[350px]">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800/60">
+                <h3 className="text-sm font-bold text-slate-200">Monthly Attendance Rate</h3>
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                  Average: 95.8%
+                </span>
+              </div>
+            </div>
+            
+            {/* Chart Area */}
+            <div className="flex-1 mt-6 flex items-end justify-between relative h-48 px-2 sm:px-6">
+              
+              {/* Grid Lines */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none text-[8px] text-slate-600 font-bold border-b border-slate-800">
+                <div className="border-t border-slate-800/40 w-full pt-0.5">100%</div>
+                <div className="border-t border-slate-800/40 w-full pt-0.5">75%</div>
+                <div className="border-t border-slate-800/40 w-full pt-0.5">50%</div>
+                <div className="border-t border-slate-800/40 w-full pt-0.5">25%</div>
+              </div>
+
+              {/* Columns */}
+              {attendanceData.map((item) => (
+                <div key={item.month} className="flex flex-col items-center group z-10 relative flex-1">
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-950 text-slate-100 text-[10px] font-bold rounded-lg px-2 py-1 shadow-xl border border-slate-800 pointer-events-none whitespace-nowrap">
+                    Rate: {item.rate}%
+                  </div>
+                  
+                  {/* Bar fill */}
+                  <div 
+                    className="w-8 sm:w-12 bg-gradient-to-t from-indigo-600 to-indigo-400 group-hover:from-indigo-500 group-hover:to-indigo-300 rounded-t-xl transition-all duration-300 shadow-lg shadow-indigo-500/5 cursor-pointer relative"
+                    style={{ height: `${item.rate}%` }}
+                  />
+                  
+                  {/* Label */}
+                  <span className="text-[10px] text-slate-500 font-bold mt-2.5">{item.month}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Chart 2: Leave Summary (Horizontal Progress Categories) */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl flex flex-col justify-between min-h-[350px]">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800/60">
+                <h3 className="text-sm font-bold text-slate-200">Leave Category Summary</h3>
+                <span className="text-[10px] text-slate-500 font-semibold">Total: 80 Days</span>
+              </div>
+            </div>
+
+            {/* List area */}
+            <div className="flex-1 mt-6 flex flex-col justify-center space-y-4">
+              {leaveSummaryData.map((item) => (
+                <div key={item.label} className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                    <span className="text-slate-400">{item.label}</span>
+                    <span className="font-bold text-slate-200">
+                      {item.days} Days <span className="text-slate-500 font-normal">({item.percentage}%)</span>
+                    </span>
+                  </div>
+                  
+                  {/* Track line */}
+                  <div className="w-full bg-slate-950 border border-slate-800 rounded-full h-2.5 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${item.color}`}
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+    </div>
   );
 };
 
 const EmployeeDashboard = () => {
   const { user } = useAuth();
   return (
-    <DashboardLayout title="Employee Portal">
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
@@ -270,8 +345,7 @@ const EmployeeDashboard = () => {
             }
           />
         </div>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 
@@ -279,8 +353,7 @@ const EmployeesMockPage = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeData | null>(null);
 
   return (
-    <DashboardLayout title="Employee Registry">
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div>
             <h1 className="text-2xl font-bold text-slate-100">All Employees</h1>
@@ -306,121 +379,70 @@ const EmployeesMockPage = () => {
             onClose={() => setSelectedEmployee(null)}
           />
         )}
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 
-const MockPlaceholderPage = ({ title }: { title: string }) => (
-  <DashboardLayout title={title}>
-    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center backdrop-blur-xl">
-      <h2 className="text-xl font-bold text-slate-200">{title} View</h2>
-      <p className="mt-2 text-sm text-slate-400">This operational panel is a placeholder for development.</p>
-    </div>
-  </DashboardLayout>
-);
+const AdminDashboardPage = lazy(async () => ({ default: AdminDashboard }));
+const EmployeeDashboardPage = lazy(async () => ({ default: EmployeeDashboard }));
+const EmployeesPage = lazy(async () => ({ default: EmployeesMockPage }));
 
 function App() {
   return (
     <Router>
+      <Suspense fallback={<PageSkeleton />}>
+      <ErrorBoundary>
       <Routes>
+        <Route path="/" element={<AuthenticatedRedirect />} />
+
+        {/* Public */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        
-        {/* Protected Dashboard Routes */}
-        <Route
-          path="/admin-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['Admin', 'HR']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-dashboard/employees-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Admin', 'HR']}>
-              <EmployeesMockPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-dashboard/attendance-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Admin', 'HR']}>
-              <AttendancePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-dashboard/leaves-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Admin', 'HR']}>
-              <LeavesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin-dashboard/payroll-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Admin', 'HR']}>
-              <MockPlaceholderPage title="Payroll Disbursement" />
-            </ProtectedRoute>
-          }
-        />
 
-        <Route
-          path="/employee-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['Employee']}>
-              <EmployeeDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/employee-dashboard/attendance-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Employee']}>
-              <AttendancePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/employee-dashboard/leaves-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Employee']}>
-              <LeavesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/employee-dashboard/payroll-mock"
-          element={
-            <ProtectedRoute allowedRoles={['Employee']}>
-              <MockPlaceholderPage title="My Payroll" />
-            </ProtectedRoute>
-          }
-        />
+        {/* Employee */}
+        <Route element={<EmployeeLayout />}>
+          <Route path="/dashboard" element={<EmployeeDashboardPage />} />
+          <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/leave" element={<LeavesPage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
+        </Route>
 
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile/:id"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Admin */}
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route path="dashboard" element={<AdminDashboardPage />} />
+          <Route path="employees" element={<EmployeesPage />} />
+          <Route path="attendance" element={<AttendancePage />} />
+          <Route path="leaves" element={<LeavesPage />} />
+          <Route path="payroll" element={<PayrollPage />} />
+        </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* Shared protected detail routes */}
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:id" element={<ProfilePage />} />
+        </Route>
+
+        <Route path="/admin-dashboard" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin-dashboard/employees-mock" element={<Navigate to="/admin/employees" replace />} />
+        <Route path="/admin-dashboard/attendance-mock" element={<Navigate to="/admin/attendance" replace />} />
+        <Route path="/admin-dashboard/leaves-mock" element={<Navigate to="/admin/leaves" replace />} />
+        <Route path="/admin-dashboard/payroll-mock" element={<Navigate to="/admin/payroll" replace />} />
+        <Route path="/admin/dashboard/employees-mock" element={<Navigate to="/admin/employees" replace />} />
+        <Route path="/admin/dashboard/attendance-mock" element={<Navigate to="/admin/attendance" replace />} />
+        <Route path="/admin/dashboard/leaves-mock" element={<Navigate to="/admin/leaves" replace />} />
+        <Route path="/admin/dashboard/payroll-mock" element={<Navigate to="/admin/payroll" replace />} />
+        <Route path="/employee-dashboard" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/employee-dashboard/attendance-mock" element={<Navigate to="/attendance" replace />} />
+        <Route path="/employee-dashboard/leaves-mock" element={<Navigate to="/leave" replace />} />
+        <Route path="/employee-dashboard/payroll-mock" element={<Navigate to="/payroll" replace />} />
+        <Route path="/dashboard/attendance-mock" element={<Navigate to="/attendance" replace />} />
+        <Route path="/dashboard/leaves-mock" element={<Navigate to="/leave" replace />} />
+        <Route path="/dashboard/payroll-mock" element={<Navigate to="/payroll" replace />} />
+
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </ErrorBoundary>
+      </Suspense>
     </Router>
   );
 }

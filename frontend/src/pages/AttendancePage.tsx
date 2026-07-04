@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import DashboardLayout from '../layouts/DashboardLayout.js';
 import { useAuth } from '../context/AuthContext.js';
 import api from '../services/api.js';
+import { isAdminOrHr } from '../utils/auth.js';
 
 // Attendance Log Interface matching the database payload
 interface AttendanceLog {
@@ -44,7 +44,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtext, colorClass }
 
 export const AttendancePage: React.FC = () => {
   const { user } = useAuth();
-  const isAdminOrHR = user?.role === 'Admin' || user?.role === 'HR';
+  const isAdminOrHR = isAdminOrHr(user?.role);
 
   // State Bindings
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
@@ -176,8 +176,7 @@ export const AttendancePage: React.FC = () => {
   };
 
   return (
-    <DashboardLayout title="Attendance Ledger">
-      <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans">
         
         {/* Header Title */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -369,8 +368,7 @@ export const AttendancePage: React.FC = () => {
           </>
         )}
 
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 

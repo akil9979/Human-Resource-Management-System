@@ -1,60 +1,122 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import api from '../services/api.js';
+
+export type UserRole = 'Admin' | 'HR' | 'HR Officer' | 'Manager' | 'Employee';
 
 export interface UserPayload {
   id: string;
   email: string;
-  role: 'Admin' | 'HR' | 'Manager' | 'Employee';
+  role: UserRole;
+}
+
+interface AuthResponse {
+  token: string;
+  user: UserPayload;
 }
 
 interface AuthContextType {
-  token: string | null;
+  currentUser: UserPayload | null;
   user: UserPayload | null;
+  token: string | null;
+  role: UserRole | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<UserPayload>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<UserPayload | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const USER_STORAGE_KEY = 'hrms_user';
+const TOKEN_STORAGE_KEY = 'hrms_token';
+
+const getStoredUser = (): UserPayload | null => {
+  const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+
+  if (!storedUser) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedUser) as UserPayload;
+  } catch {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    return null;
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<UserPayload | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserPayload | null>(() => getStoredUser());
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [role, setRole] = useState<UserRole | null>(() => getStoredUser()?.role ?? null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('hrms_token');
-    const storedUser = localStorage.getItem('hrms_user');
+  const persistSession = useCallback((nextUser: UserPayload, nextToken?: string | null) => {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    setCurrentUser(nextUser);
+    setRole(nextUser.role);
 
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+    if (nextToken) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
+      setToken(nextToken);
     }
-    setLoading(false);
   }, []);
+
+  const clearSession = useCallback(() => {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    setCurrentUser(null);
+    setToken(null);
+    setRole(null);
+  }, []);
+
+  const refreshUser = useCallback(async (): Promise<UserPayload | null> => {
+    try {
+      const response = await api.get('/auth/me');
+      const refreshedUser = response.data.user as UserPayload;
+
+      persistSession(refreshedUser, localStorage.getItem(TOKEN_STORAGE_KEY));
+      return refreshedUser;
+    } catch {
+      clearSession();
+      return null;
+    }
+  }, [clearSession, persistSession]);
+
+  useEffect(() => {
+    refreshUser().finally(() => setLoading(false));
+  }, [refreshUser]);
 
   const login = async (email: string, password: string): Promise<UserPayload> => {
     const response = await api.post('/auth/signin', { email, password });
-    const { token: returnedToken, user: returnedUser } = response.data;
+    const { token: returnedToken, user: returnedUser } = response.data as AuthResponse;
 
-    localStorage.setItem('hrms_token', returnedToken);
-    localStorage.setItem('hrms_user', JSON.stringify(returnedUser));
+    persistSession(returnedUser, returnedToken);
 
-    setToken(returnedToken);
-    setUser(returnedUser);
-
-    return returnedUser as UserPayload;
+    return returnedUser;
   };
 
-  const logout = () => {
-    localStorage.removeItem('hrms_token');
-    localStorage.removeItem('hrms_user');
-    setToken(null);
-    setUser(null);
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      clearSession();
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        user: currentUser,
+        token,
+        role,
+        loading,
+        login,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

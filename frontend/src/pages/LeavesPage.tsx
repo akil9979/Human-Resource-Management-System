@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import DashboardLayout from '../layouts/DashboardLayout.js';
 import { useAuth } from '../context/AuthContext.js';
+import { isAdminOrHr } from '../utils/auth.js';
 
 // Leave Request Interface
 interface LeaveRequest {
@@ -95,7 +95,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtext, colorClass }
 
 export const LeavesPage: React.FC = () => {
   const { user } = useAuth();
-  const isAdminOrHR = user?.role === 'Admin' || user?.role === 'HR';
+  const isAdminOrHR = isAdminOrHr(user?.role);
 
   // Leaves Master List State
   const [leaves, setLeaves] = useState<LeaveRequest[]>(initialLeaves);
@@ -246,8 +246,7 @@ export const LeavesPage: React.FC = () => {
   };
 
   return (
-    <DashboardLayout title="Leaves Management">
-      <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans">
         
         {/* Header Title */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -640,8 +639,7 @@ export const LeavesPage: React.FC = () => {
           </div>
         )}
 
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 

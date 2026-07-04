@@ -19,25 +19,59 @@ const payrollSchema = new mongoose_1.Schema({
         required: [true, 'Payroll year is required'],
         min: [2000, 'Year must be greater than or equal to 2000'],
     },
-    basicSalary: {
+    basic: {
         type: Number,
-        required: [true, 'Basic salary is required'],
-        min: [0, 'Basic salary cannot be negative'],
+        required: [true, 'Basic wage value is required'],
+        min: [0, 'Basic value cannot be negative'],
     },
-    allowances: {
+    hra: {
         type: Number,
         default: 0,
-        min: [0, 'Allowances cannot be negative'],
+        min: [0, 'HRA cannot be negative'],
     },
-    deductions: {
+    allowance: {
         type: Number,
         default: 0,
-        min: [0, 'Deductions cannot be negative'],
+        min: [0, 'Allowance cannot be negative'],
     },
-    netSalary: {
+    bonus: {
         type: Number,
-        required: [true, 'Net salary is required'],
-        min: [0, 'Net salary cannot be negative'],
+        default: 0,
+        min: [0, 'Bonus cannot be negative'],
+    },
+    pf: {
+        type: Number,
+        default: 0,
+        min: [0, 'PF cannot be negative'],
+    },
+    professionalTax: {
+        type: Number,
+        default: 0,
+        min: [0, 'Professional tax cannot be negative'],
+    },
+    workingDays: {
+        type: Number,
+        required: [true, 'Working days is required'],
+        min: [0, 'Working days cannot be negative'],
+    },
+    wageType: {
+        type: String,
+        required: [true, 'Wage type is required'],
+        enum: {
+            values: ['Monthly', 'Hourly', 'Daily'],
+            message: '{VALUE} is not a valid wage type',
+        },
+        default: 'Monthly',
+    },
+    monthlySalary: {
+        type: Number,
+        required: [true, 'Monthly salary is required'],
+        min: [0, 'Monthly salary cannot be negative'],
+    },
+    yearlySalary: {
+        type: Number,
+        required: [true, 'Yearly salary is required'],
+        min: [0, 'Yearly salary cannot be negative'],
     },
     status: {
         type: String,
@@ -62,12 +96,18 @@ const payrollSchema = new mongoose_1.Schema({
 }, {
     timestamps: true,
 });
-// Pre-validate to automatically compute netSalary if not explicitly provided
+// Pre-validate hook to calculate monthlySalary and yearlySalary automatically
 payrollSchema.pre('validate', function (next) {
-    const basic = this.basicSalary || 0;
-    const allow = this.allowances || 0;
-    const deduct = this.deductions || 0;
-    this.netSalary = Math.max(0, basic + allow - deduct);
+    const basic = this.basic || 0;
+    const hra = this.hra || 0;
+    const allowance = this.allowance || 0;
+    const bonus = this.bonus || 0;
+    const pf = this.pf || 0;
+    const professionalTax = this.professionalTax || 0;
+    const totalEarnings = basic + hra + allowance + bonus;
+    const totalDeductions = pf + professionalTax;
+    this.monthlySalary = Math.max(0, totalEarnings - totalDeductions);
+    this.yearlySalary = this.monthlySalary * 12;
     next();
 });
 // Ensure a single payroll run per employee per month/year

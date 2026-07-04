@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import DashboardLayout from '../layouts/DashboardLayout.js';
 import { useAuth } from '../context/AuthContext.js';
 import api from '../services/api.js';
 
@@ -190,9 +189,7 @@ export const ProfilePage: React.FC = () => {
 
   if (!profileData) {
     return (
-      <DashboardLayout title="Profile file">
-        <div className="text-center py-12 text-slate-400 font-sans">Loading Profile details...</div>
-      </DashboardLayout>
+      <div className="text-center py-12 text-slate-400 font-sans">Loading Profile details...</div>
     );
   }
 
@@ -204,8 +201,7 @@ export const ProfilePage: React.FC = () => {
   ];
 
   return (
-    <DashboardLayout title={isOwnProfile ? 'My Profile' : `${profileData.firstName}'s Profile`}>
-      <div className="space-y-6 max-w-4xl mx-auto font-sans">
+    <div className="space-y-6 max-w-4xl mx-auto font-sans">
         {/* Header Block */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl flex flex-col sm:flex-row items-center sm:space-x-6 text-center sm:text-left">
           <div
@@ -555,8 +551,7 @@ export const ProfilePage: React.FC = () => {
             </div>
           )}
         </form>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 

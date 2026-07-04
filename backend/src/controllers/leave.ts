@@ -2,6 +2,8 @@ import { Response } from 'express';
 import fs from 'fs';
 import { AuthRequest } from '../types/express.js';
 import Leave from '../models/leave.js';
+import User from '../models/user.js';
+import { spawnNotification } from './notification.js';
 
 export const requestLeave = async (req: AuthRequest, res: Response) => {
   if (!req.user) {
@@ -75,6 +77,21 @@ export const requestLeave = async (req: AuthRequest, res: Response) => {
 
     await leave.save();
 
+    // Notify all Admin & HR users about the new leave request
+    try {
+      const adminAndHRUsers = await User.find({ role: { $in: ['Admin', 'HR'] } });
+      for (const recipient of adminAndHRUsers) {
+        await spawnNotification(
+          recipient._id,
+          'New Leave Request',
+          `A new ${leaveType} leave request has been submitted (${start.toDateString()} – ${end.toDateString()}).`,
+          'New_Leave'
+        );
+      }
+    } catch (notifErr) {
+      console.error('Failed to spawn leave request notifications:', notifErr);
+    }
+
     return res.status(201).json({
       status: 'success',
       message: 'Leave request submitted successfully',
@@ -126,11 +143,24 @@ export const updateLeaveStatus = async (req: AuthRequest, res: Response) => {
 
     await leave.save();
 
-    // Emits Audit Log to standard server logs
+    // Audit log
     const timestamp = new Date().toISOString();
     console.log(
       `[AUDIT LOG] [${timestamp}] Leave Status Updated. Request ID: ${leave._id}, Target Employee User: ${leave.employee}, Action: ${status}, Performed By: ${req.user.id}, Comment: "${adminComment || 'None'}"`
     );
+
+    // Notify the employee whose leave was approved or rejected
+    try {
+      const notifType = status === 'Approved' ? 'Leave_Approved' : 'Leave_Rejected';
+      const notifTitle = status === 'Approved' ? 'Leave Request Approved' : 'Leave Request Rejected';
+      const notifMessage =
+        status === 'Approved'
+          ? `Your ${leave.leaveType} leave request has been approved.${adminComment ? ` Note: ${adminComment}` : ''}`
+          : `Your ${leave.leaveType} leave request has been rejected.${adminComment ? ` Reason: ${adminComment}` : ''}`;
+      await spawnNotification(leave.employee, notifTitle, notifMessage, notifType);
+    } catch (notifErr) {
+      console.error('Failed to spawn leave status notification:', notifErr);
+    }
 
     return res.status(200).json({
       status: 'success',

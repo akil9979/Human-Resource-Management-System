@@ -2,14 +2,27 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../types/express.js';
 
-export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ status: 'error', message: 'Access denied: No token provided' });
+const getCookieValue = (cookieHeader: string | undefined, name: string): string | undefined => {
+  if (!cookieHeader) {
+    return undefined;
   }
 
-  const token = authHeader.split(' ')[1];
+  return cookieHeader
+    .split(';')
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+};
+
+export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+  const cookieToken = getCookieValue(req.headers.cookie, 'hrms_auth');
+  const token = bearerToken || cookieToken;
+
+  if (!token) {
+    return res.status(401).json({ status: 'error', message: 'Access denied: No token provided' });
+  }
 
   try {
     const secret = process.env.JWT_SECRET;

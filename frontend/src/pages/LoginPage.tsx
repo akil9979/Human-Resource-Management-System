@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
 import { useAuth } from '../context/AuthContext';
+import { getRoleRedirectPath } from '../utils/auth';
 
 export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -19,13 +20,7 @@ export const LoginPage: React.FC = () => {
     setBackendError(null);
     try {
       const user = await login(data.email, data.password);
-      
-      // Redirect based on role
-      if (user.role === 'Admin' || user.role === 'HR') {
-        navigate('/admin-dashboard');
-      } else {
-        navigate('/employee-dashboard');
-      }
+      navigate(getRoleRedirectPath(user.role), { replace: true });
     } catch (err: any) {
       console.error('Login error:', err);
       const msg = err.response?.data?.message || 'Login failed. Please check your network connection.';
@@ -61,10 +56,6 @@ export const LoginPage: React.FC = () => {
             placeholder="name@company.com"
             {...register('email', {
               required: 'Email or Login ID is required',
-              pattern: {
-                value: /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-                message: 'Please enter a valid email address',
-              },
             })}
           />
           {errors.email && (

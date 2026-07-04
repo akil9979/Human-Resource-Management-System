@@ -19,7 +19,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, titl
 
       {/* Mobile Drawer Sidebar */}
       {sidebarOpen && (
-        <div className="fixed inset-0 flex z-40 md:hidden">
+        <div
+          className="fixed inset-0 flex z-40 md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+        >
           {/* Backdrop overlay */}
           <div
             className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-300"
@@ -32,7 +37,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, titl
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-850 hover:bg-slate-850/80 text-slate-400 hover:text-slate-200 transition-colors border border-slate-800"
+                aria-label="Close navigation menu"
+                className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-850 hover:bg-slate-850/80 text-slate-400 hover:text-slate-200 transition-colors border border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

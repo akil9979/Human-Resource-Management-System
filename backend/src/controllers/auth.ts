@@ -3,6 +3,27 @@ import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
 import { AuthRequest } from '../types/express.js';
 
+const AUTH_COOKIE_NAME = 'hrms_auth';
+
+const setAuthCookie = (res: Response, token: string) => {
+  res.cookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+};
+
+const clearAuthCookie = (res: Response) => {
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  });
+};
+
 const generateToken = (id: string, email: string, role: string): string => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -42,6 +63,7 @@ export const signup = async (req: Request, res: Response) => {
     await user.save();
 
     const token = generateToken(user._id.toString(), user.email, user.role);
+    setAuthCookie(res, token);
 
     return res.status(201).json({
       status: 'success',
@@ -85,6 +107,7 @@ export const signin = async (req: Request, res: Response) => {
     }
 
     const token = generateToken(user._id.toString(), user.email, user.role);
+    setAuthCookie(res, token);
 
     return res.status(200).json({
       status: 'success',
@@ -104,5 +127,14 @@ export const getMe = async (req: AuthRequest, res: Response) => {
   return res.status(200).json({
     status: 'success',
     user: req.user,
+  });
+};
+
+export const logout = async (_req: Request, res: Response) => {
+  clearAuthCookie(res);
+
+  return res.status(200).json({
+    status: 'success',
+    message: 'Logged out successfully',
   });
 };

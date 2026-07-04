@@ -3,10 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkOut = exports.checkIn = exports.getAttendanceLogs = void 0;
+exports.flagMissingAttendance = exports.checkOut = exports.checkIn = exports.getAttendanceLogs = void 0;
 const attendance_js_1 = __importDefault(require("../models/attendance.js"));
 const user_js_1 = __importDefault(require("../models/user.js"));
 const employeeProfile_js_1 = __importDefault(require("../models/employeeProfile.js"));
+const notification_js_1 = require("./notification.js");
 const getAttendanceLogs = async (req, res) => {
     if (!req.user) {
         return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
@@ -204,6 +205,11 @@ const checkOut = async (req, res) => {
         });
         // Prevent checkout before checkin
         if (!attendance) {
+            // Notify the employee their check-in is missing for today
+            try {
+                await (0, notification_js_1.spawnNotification)(req.user.id, 'Attendance Missing', `You have not checked in for today (${today.toDateString()}). Please contact HR if this is an error.`, 'Attendance_Missing');
+            }
+            catch { /* ignore */ }
             return res.status(400).json({
                 status: 'error',
                 message: 'You have not checked in for today yet',
@@ -240,3 +246,33 @@ const checkOut = async (req, res) => {
     }
 };
 exports.checkOut = checkOut;
+/**
+ * POST /api/attendance/flag-missing
+ * Admin/HR sends an Attendance_Missing notification to a specific employee.
+ * Body: { employeeUserId: string, date?: string }
+ */
+const flagMissingAttendance = async (req, res) => {
+    if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+    const { employeeUserId, date } = req.body;
+    if (!employeeUserId) {
+        return res.status(400).json({ status: 'error', message: 'employeeUserId is required' });
+    }
+    try {
+        const targetUser = await user_js_1.default.findById(employeeUserId);
+        if (!targetUser) {
+            return res.status(404).json({ status: 'error', message: 'Employee user not found' });
+        }
+        const flagDate = date ? new Date(date).toDateString() : new Date().toDateString();
+        await (0, notification_js_1.spawnNotification)(employeeUserId, 'Attendance Missing', `Your attendance record is missing for ${flagDate}. Please check in or contact your HR representative.`, 'Attendance_Missing');
+        return res.status(200).json({
+            status: 'success',
+            message: `Attendance missing notification sent to ${targetUser.email}`,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+};
+exports.flagMissingAttendance = flagMissingAttendance;

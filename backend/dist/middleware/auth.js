@@ -5,12 +5,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.roleMiddleware = exports.authMiddleware = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const getCookieValue = (cookieHeader, name) => {
+    if (!cookieHeader) {
+        return undefined;
+    }
+    return cookieHeader
+        .split(';')
+        .map((cookie) => cookie.trim())
+        .find((cookie) => cookie.startsWith(`${name}=`))
+        ?.slice(name.length + 1);
+};
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+    const cookieToken = getCookieValue(req.headers.cookie, 'hrms_auth');
+    const token = bearerToken || cookieToken;
+    if (!token) {
         return res.status(401).json({ status: 'error', message: 'Access denied: No token provided' });
     }
-    const token = authHeader.split(' ')[1];
     try {
         const secret = process.env.JWT_SECRET;
         if (!secret) {

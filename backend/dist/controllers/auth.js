@@ -3,9 +3,27 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMe = exports.signin = exports.signup = void 0;
+exports.logout = exports.getMe = exports.signin = exports.signup = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_js_1 = __importDefault(require("../models/user.js"));
+const AUTH_COOKIE_NAME = 'hrms_auth';
+const setAuthCookie = (res, token) => {
+    res.cookie(AUTH_COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000,
+        path: '/',
+    });
+};
+const clearAuthCookie = (res) => {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+    });
+};
 const generateToken = (id, email, role) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
@@ -38,6 +56,7 @@ const signup = async (req, res) => {
         });
         await user.save();
         const token = generateToken(user._id.toString(), user.email, user.role);
+        setAuthCookie(res, token);
         return res.status(201).json({
             status: 'success',
             token,
@@ -76,6 +95,7 @@ const signin = async (req, res) => {
             return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
         const token = generateToken(user._id.toString(), user.email, user.role);
+        setAuthCookie(res, token);
         return res.status(200).json({
             status: 'success',
             token,
@@ -98,3 +118,11 @@ const getMe = async (req, res) => {
     });
 };
 exports.getMe = getMe;
+const logout = async (_req, res) => {
+    clearAuthCookie(res);
+    return res.status(200).json({
+        status: 'success',
+        message: 'Logged out successfully',
+    });
+};
+exports.logout = logout;
