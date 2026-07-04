@@ -5,6 +5,91 @@ import Leave from '../models/leave.js';
 import User from '../models/user.js';
 import { spawnNotification } from './notification.js';
 
+const countLeaveDays = (startDate: Date, endDate: Date): number => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setUTCHours(0, 0, 0, 0);
+  end.setUTCHours(0, 0, 0, 0);
+
+  const diffMs = end.getTime() - start.getTime();
+  return Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1);
+};
+
+export const getLeaves = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
+  }
+
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || 1), 10));
+    const limit = Math.max(1, parseInt(String(req.query.limit || 10), 10));
+    const status = req.query.status as string | undefined;
+    const isAdminOrHR = req.user.role === 'Admin' || req.user.role === 'HR';
+    const query: any = {};
+
+    if (!isAdminOrHR) {
+      query.employee = req.user.id;
+    } else if (req.query.employeeId) {
+      query.employee = req.query.employeeId;
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    const skip = (page - 1) * limit;
+    const totalDocs = await Leave.countDocuments(query);
+    const leaves = await Leave.find(query)
+      .populate('employee', 'email role loginId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const currentYear = new Date().getFullYear();
+    const yearlyLeaves = await Leave.find({
+      ...query,
+      startDate: {
+        $gte: new Date(Date.UTC(currentYear, 0, 1)),
+        $lte: new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999)),
+      },
+    });
+
+    const approvedByType = yearlyLeaves
+      .filter((leave) => leave.status === 'Approved')
+      .reduce(
+        (summary, leave) => {
+          summary[leave.leaveType] += countLeaveDays(leave.startDate, leave.endDate);
+          return summary;
+        },
+        { Paid: 0, Sick: 0, Unpaid: 0 } as Record<'Paid' | 'Sick' | 'Unpaid', number>
+      );
+
+    const summary = {
+      pendingCount: await Leave.countDocuments({ ...query, status: 'Pending' }),
+      approvedCount: await Leave.countDocuments({ ...query, status: 'Approved' }),
+      rejectedCount: await Leave.countDocuments({ ...query, status: 'Rejected' }),
+      paidTaken: approvedByType.Paid,
+      sickTaken: approvedByType.Sick,
+      unpaidTaken: approvedByType.Unpaid,
+      paidRemaining: Math.max(0, 18 - approvedByType.Paid),
+      sickRemaining: Math.max(0, 10 - approvedByType.Sick),
+    };
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        leaves,
+        totalDocs,
+        totalPages: Math.ceil(totalDocs / limit),
+        currentPage: page,
+        summary,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: (error as Error).message });
+  }
+};
+
 export const requestLeave = async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
