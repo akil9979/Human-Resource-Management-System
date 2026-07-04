@@ -65,7 +65,12 @@ export const signin = async (req: Request, res: Response) => {
   }
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      $or: [
+        { email: email.toLowerCase() },
+        { loginId: email.toUpperCase() }
+      ]
+    });
     if (!user) {
       return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
     }

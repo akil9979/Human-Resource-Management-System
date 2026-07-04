@@ -2,11 +2,13 @@ import { Schema, model, Types } from 'mongoose';
 
 export interface ILeave {
   employee: Types.ObjectId;
-  leaveType: 'Sick' | 'Casual' | 'Maternity' | 'Paternity' | 'Unpaid' | 'Annual';
+  leaveType: 'Paid' | 'Sick' | 'Unpaid';
   startDate: Date;
   endDate: Date;
   reason: string;
+  attachment?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  adminComment?: string;
   approvedBy?: Types.ObjectId;
   approvedAt?: Date;
   createdAt?: Date;
@@ -24,7 +26,7 @@ const leaveSchema = new Schema<ILeave>(
       type: String,
       required: [true, 'Leave type is required'],
       enum: {
-        values: ['Sick', 'Casual', 'Maternity', 'Paternity', 'Unpaid', 'Annual'],
+        values: ['Paid', 'Sick', 'Unpaid'],
         message: '{VALUE} is not a valid leave type',
       },
     },
@@ -48,6 +50,10 @@ const leaveSchema = new Schema<ILeave>(
       required: [true, 'Reason for leave is required'],
       trim: true,
     },
+    attachment: {
+      type: String,
+      default: null,
+    },
     status: {
       type: String,
       enum: {
@@ -55,6 +61,11 @@ const leaveSchema = new Schema<ILeave>(
         message: '{VALUE} is not a valid leave status',
       },
       default: 'Pending',
+    },
+    adminComment: {
+      type: String,
+      default: null,
+      trim: true,
     },
     approvedBy: {
       type: Schema.Types.ObjectId,

@@ -12,7 +12,7 @@ const leaveSchema = new mongoose_1.Schema({
         type: String,
         required: [true, 'Leave type is required'],
         enum: {
-            values: ['Sick', 'Casual', 'Maternity', 'Paternity', 'Unpaid', 'Annual'],
+            values: ['Paid', 'Sick', 'Unpaid'],
             message: '{VALUE} is not a valid leave type',
         },
     },
@@ -36,6 +36,10 @@ const leaveSchema = new mongoose_1.Schema({
         required: [true, 'Reason for leave is required'],
         trim: true,
     },
+    attachment: {
+        type: String,
+        default: null,
+    },
     status: {
         type: String,
         enum: {
@@ -43,6 +47,11 @@ const leaveSchema = new mongoose_1.Schema({
             message: '{VALUE} is not a valid leave status',
         },
         default: 'Pending',
+    },
+    adminComment: {
+        type: String,
+        default: null,
+        trim: true,
     },
     approvedBy: {
         type: mongoose_1.Schema.Types.ObjectId,

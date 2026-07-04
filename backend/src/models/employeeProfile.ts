@@ -20,6 +20,10 @@ export interface IEmployeeProfile {
   salary: number;
   manager?: Types.ObjectId;
   status: 'Active' | 'On Leave' | 'Terminated' | 'Resigned';
+  profilePicture?: string;
+  about?: string;
+  skills?: string[];
+  certificates?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -37,7 +41,7 @@ const employeeProfileSchema = new Schema<IEmployeeProfile>(
       required: [true, 'Employee ID is required'],
       unique: true,
       trim: true,
-      match: [/^EMP-\d{4}-\d{4}$/, 'Employee ID must be in the format EMP-YYYY-XXXX (e.g., EMP-2026-0001)'],
+      match: [/^(EMP-\d{4}-\d{4}|[A-Z]{6}\d{8})$/, 'Employee ID must be in the format EMP-YYYY-XXXX or standard generated Login ID (e.g., OIJODO20250001)'],
     },
     firstName: {
       type: String,
@@ -128,6 +132,22 @@ const employeeProfileSchema = new Schema<IEmployeeProfile>(
         message: '{VALUE} is not a valid status',
       },
       default: 'Active',
+    },
+    profilePicture: {
+      type: String,
+      default: '',
+    },
+    about: {
+      type: String,
+      default: '',
+    },
+    skills: {
+      type: [String],
+      default: [],
+    },
+    certificates: {
+      type: [String],
+      default: [],
     },
   },
   {

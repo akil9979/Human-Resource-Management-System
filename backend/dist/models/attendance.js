@@ -41,6 +41,11 @@ const attendanceSchema = new mongoose_1.Schema({
         default: 0,
         min: [0, 'Work hours cannot be negative'],
     },
+    extraHours: {
+        type: Number,
+        default: 0,
+        min: [0, 'Extra hours cannot be negative'],
+    },
 }, {
     timestamps: true,
 });

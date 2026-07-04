@@ -8,6 +8,7 @@ export interface IAttendance {
   status: 'Present' | 'Absent' | 'Late' | 'Half Day' | 'On Leave';
   location: 'Office' | 'Remote';
   workHours?: number;
+  extraHours?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -51,6 +52,11 @@ const attendanceSchema = new Schema<IAttendance>(
       type: Number,
       default: 0,
       min: [0, 'Work hours cannot be negative'],
+    },
+    extraHours: {
+      type: Number,
+      default: 0,
+      min: [0, 'Extra hours cannot be negative'],
     },
   },
   {

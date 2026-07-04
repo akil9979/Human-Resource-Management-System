@@ -1,11 +1,16 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
+import employeeRoutes from './routes/employee.js';
+import profileRoutes from './routes/profile.js';
+import attendanceRoutes from './routes/attendance.js';
+import leaveRoutes from './routes/leave.js';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ override: true });
 
 // Connect to Database
 connectDB();
@@ -15,9 +20,14 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.resolve('uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/profiles', profileRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/leaves', leaveRoutes);
 
 // Basic health check route
 app.get('/api/health', (req: Request, res: Response) => {

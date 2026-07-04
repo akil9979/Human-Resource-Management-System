@@ -59,7 +59,12 @@ const signin = async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'Email and password are required' });
     }
     try {
-        const user = await user_js_1.default.findOne({ email });
+        const user = await user_js_1.default.findOne({
+            $or: [
+                { email: email.toLowerCase() },
+                { loginId: email.toUpperCase() }
+            ]
+        });
         if (!user) {
             return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }

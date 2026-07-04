@@ -6,6 +6,7 @@ export interface IUser {
   password: string;
   role: 'Admin' | 'HR' | 'Manager' | 'Employee';
   isActive: boolean;
+  loginId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -25,6 +26,13 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
       lowercase: true,
       trim: true,
       match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email address'],
+    },
+    loginId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      uppercase: true,
     },
     password: {
       type: String,
