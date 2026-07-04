@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import User from '../models/user.js';
 import EmployeeProfile from '../models/employeeProfile.js';
 import { spawnNotification } from './notification.js';
+import { AuthRequest } from '../types/express.js';
+import crypto from 'crypto';
 
 // Sequential Employee Login ID Generator
 export const generateEmployeeId = async (
@@ -44,10 +46,15 @@ export const generateEmployeeId = async (
   return `${prefix}${serialStr}`;
 };
 
-export const createEmployee = async (req: Request, res: Response) => {
+const generateTemporaryPassword = () => {
+  return crypto.randomBytes(18).toString('base64url');
+};
+
+export const createEmployee = async (req: AuthRequest, res: Response) => {
   const {
     email,
     password,
+    role,
     companyName,
     firstName,
     lastName,
@@ -66,7 +73,6 @@ export const createEmployee = async (req: Request, res: Response) => {
   // Basic required fields validation
   if (
     !email ||
-    !password ||
     !companyName ||
     !firstName ||
     !lastName ||
@@ -83,9 +89,20 @@ export const createEmployee = async (req: Request, res: Response) => {
     return res.status(400).json({ status: 'error', message: 'All required employee fields must be provided' });
   }
 
+  const allowedRoles = ['Admin', 'HR', 'Employee'];
+  const requestedRole = role || 'Employee';
+  if (!allowedRoles.includes(requestedRole)) {
+    return res.status(400).json({ status: 'error', message: `Invalid role. Allowed roles are: ${allowedRoles.join(', ')}` });
+  }
+
+  if (req.user?.role === 'HR' && requestedRole !== 'Employee') {
+    return res.status(403).json({ status: 'error', message: 'HR can only create Employee accounts' });
+  }
+
   try {
     // Check if email already taken
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({ status: 'error', message: 'A user account with this email already exists' });
     }
@@ -100,9 +117,9 @@ export const createEmployee = async (req: Request, res: Response) => {
 
     // 2. Create the User account
     const user = new User({
-      email,
-      password,
-      role: 'Employee',
+      email: normalizedEmail,
+      password: password || generateTemporaryPassword(),
+      role: requestedRole,
       loginId,
     });
     await user.save();

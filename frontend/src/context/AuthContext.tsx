@@ -28,7 +28,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USER_STORAGE_KEY = 'hrms_user';
-const TOKEN_STORAGE_KEY = 'hrms_token';
 
 const getStoredUser = (): UserPayload | null => {
   const storedUser = localStorage.getItem(USER_STORAGE_KEY);
@@ -47,7 +46,7 @@ const getStoredUser = (): UserPayload | null => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<UserPayload | null>(() => getStoredUser());
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(() => getStoredUser()?.role ?? null);
   const [loading, setLoading] = useState(true);
 
@@ -57,14 +56,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRole(nextUser.role);
 
     if (nextToken) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
       setToken(nextToken);
     }
   }, []);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
     setCurrentUser(null);
     setToken(null);
     setRole(null);
@@ -75,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await api.get('/auth/me');
       const refreshedUser = response.data.user as UserPayload;
 
-      persistSession(refreshedUser, localStorage.getItem(TOKEN_STORAGE_KEY));
+      persistSession(refreshedUser);
       return refreshedUser;
     } catch {
       clearSession();

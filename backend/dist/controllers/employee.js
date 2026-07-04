@@ -7,6 +7,7 @@ exports.searchEmployees = exports.createEmployee = exports.generateEmployeeId = 
 const user_js_1 = __importDefault(require("../models/user.js"));
 const employeeProfile_js_1 = __importDefault(require("../models/employeeProfile.js"));
 const notification_js_1 = require("./notification.js");
+const crypto_1 = __importDefault(require("crypto"));
 // Sequential Employee Login ID Generator
 const generateEmployeeId = async (companyName, firstName, lastName, joiningDate) => {
     // Normalize strings and grab initials
@@ -38,11 +39,13 @@ const generateEmployeeId = async (companyName, firstName, lastName, joiningDate)
     return `${prefix}${serialStr}`;
 };
 exports.generateEmployeeId = generateEmployeeId;
+const generateTemporaryPassword = () => {
+    return crypto_1.default.randomBytes(18).toString('base64url');
+};
 const createEmployee = async (req, res) => {
-    const { email, password, companyName, firstName, lastName, gender, dateOfBirth, contactNumber, emergencyContact, address, department, designation, dateOfJoining, salary, manager, } = req.body;
+    const { email, password, role, companyName, firstName, lastName, gender, dateOfBirth, contactNumber, emergencyContact, address, department, designation, dateOfJoining, salary, manager, } = req.body;
     // Basic required fields validation
     if (!email ||
-        !password ||
         !companyName ||
         !firstName ||
         !lastName ||
@@ -57,9 +60,18 @@ const createEmployee = async (req, res) => {
         salary === undefined) {
         return res.status(400).json({ status: 'error', message: 'All required employee fields must be provided' });
     }
+    const allowedRoles = ['Admin', 'HR', 'Employee'];
+    const requestedRole = role || 'Employee';
+    if (!allowedRoles.includes(requestedRole)) {
+        return res.status(400).json({ status: 'error', message: `Invalid role. Allowed roles are: ${allowedRoles.join(', ')}` });
+    }
+    if (req.user?.role === 'HR' && requestedRole !== 'Employee') {
+        return res.status(403).json({ status: 'error', message: 'HR can only create Employee accounts' });
+    }
     try {
         // Check if email already taken
-        const existingUser = await user_js_1.default.findOne({ email });
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const existingUser = await user_js_1.default.findOne({ email: normalizedEmail });
         if (existingUser) {
             return res.status(400).json({ status: 'error', message: 'A user account with this email already exists' });
         }
@@ -67,9 +79,9 @@ const createEmployee = async (req, res) => {
         const loginId = await (0, exports.generateEmployeeId)(companyName, firstName, lastName, new Date(dateOfJoining));
         // 2. Create the User account
         const user = new user_js_1.default({
-            email,
-            password,
-            role: 'Employee',
+            email: normalizedEmail,
+            password: password || generateTemporaryPassword(),
+            role: requestedRole,
             loginId,
         });
         await user.save();
