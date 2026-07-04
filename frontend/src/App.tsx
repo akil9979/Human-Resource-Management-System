@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuth } from './context/AuthContext';
 import EmployeeCard, { EmployeeData } from './components/EmployeeCard';
 import EmployeeProfileModal from './components/EmployeeProfileModal';
+import { AddEmployeeModal } from './components/AddEmployeeModal';
 import StatCard from './components/StatCard';
 import { FullPageSpinner } from './components/LoadingSpinner';
 import { PageSkeleton } from './components/Skeleton';
@@ -18,7 +19,6 @@ import api from './services/api';
 
 // ── Lazy-loaded pages (code splitting) ────────────────────────────────────────
 const LoginPage      = lazy(() => import('./pages/LoginPage'));
-const SignupPage     = lazy(() => import('./pages/SignupPage'));
 const ProfilePage    = lazy(() => import('./pages/ProfilePage'));
 const AttendancePage = lazy(() => import('./pages/AttendancePage'));
 const LeavesPage     = lazy(() => import('./pages/LeavesPage'));
@@ -314,47 +314,65 @@ const EmployeeDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadDashboard = async () => {
     if (!user?.id) return;
+    setLoading(true);
+    setError(null);
 
-    let active = true;
+    try {
+      const [profileResponse, attendanceResponse, leavesResponse, payrollResponse] = await Promise.all([
+        api.get(`/profile/${user.id}`),
+        api.get('/attendance', { params: { date: getTodayDateString(), limit: 1 } }),
+        api.get('/leaves', { params: { limit: 5 } }),
+        api.get('/payroll'),
+      ]);
 
-    const loadDashboard = async () => {
-      setLoading(true);
-      setError(null);
+      const attendanceDocs = attendanceResponse.data?.data?.docs || [];
+      const payrollRows = payrollResponse.data?.data || [];
 
-      try {
-        const [profileResponse, attendanceResponse, leavesResponse, payrollResponse] = await Promise.all([
-          api.get(`/profile/${user.id}`),
-          api.get('/attendance', { params: { date: getTodayDateString(), limit: 1 } }),
-          api.get('/leaves', { params: { limit: 5 } }),
-          api.get('/payroll'),
-        ]);
+      setProfile(profileResponse.data?.data || null);
+      setTodayAttendance(attendanceDocs[0] || null);
+      setLeaveSummary(leavesResponse.data?.data?.summary || null);
+      setRecentLeaves(leavesResponse.data?.data?.leaves || []);
+      setLatestPayroll(payrollRows[0] || null);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Unable to load dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        if (!active) return;
-
-        const attendanceDocs = attendanceResponse.data?.data?.docs || [];
-        const payrollRows = payrollResponse.data?.data || [];
-
-        setProfile(profileResponse.data?.data || null);
-        setTodayAttendance(attendanceDocs[0] || null);
-        setLeaveSummary(leavesResponse.data?.data?.summary || null);
-        setRecentLeaves(leavesResponse.data?.data?.leaves || []);
-        setLatestPayroll(payrollRows[0] || null);
-      } catch (err: any) {
-        if (!active) return;
-        setError(err.response?.data?.message || 'Unable to load dashboard data.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
+  useEffect(() => {
     loadDashboard();
-
-    return () => {
-      active = false;
-    };
   }, [user?.id]);
+
+  const handleCheckIn = async () => {
+    try {
+      const response = await api.post('/attendance/check-in', {
+        location: 'Office',
+      });
+      if (response.data?.status === 'success') {
+        alert('Checked in successfully!');
+        loadDashboard();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Failed to check in.');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    try {
+      const response = await api.put('/attendance/check-out');
+      if (response.data?.status === 'success') {
+        alert('Checked out successfully!');
+        loadDashboard();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Failed to check out.');
+    }
+  };
 
   const displayName = profile ? `${profile.firstName} ${profile.lastName}` : user?.email?.split('@')[0] || 'Employee';
   const attendanceStatus = todayAttendance?.status || 'Not checked in';
@@ -363,14 +381,37 @@ const EmployeeDashboard = () => {
 
   return (
     <div className="space-y-6">
-        <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl relative overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
-            Welcome back, <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">{displayName}</span>!
-          </h1>
-          <p className="mt-2 text-sm text-slate-400 max-w-xl">
-            Have a productive day today. Make sure to log your check-in timings.
-          </p>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
+              Welcome back, <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">{displayName}</span>!
+            </h1>
+            <p className="mt-2 text-sm text-slate-400 max-w-xl">
+              Have a productive day today. Make sure to log your check-in timings.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3 shrink-0 z-10">
+            {todayAttendance?.checkIn && !todayAttendance?.checkOut ? (
+              <button
+                onClick={handleCheckOut}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl px-5 py-3 transition-colors shadow-lg shadow-rose-600/15"
+              >
+                Check Out
+              </button>
+            ) : todayAttendance?.checkOut ? (
+              <span className="bg-slate-800 text-slate-400 font-bold text-xs rounded-xl px-5 py-3 border border-slate-700">
+                Logged Out
+              </span>
+            ) : (
+              <button
+                onClick={handleCheckIn}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl px-5 py-3 transition-colors shadow-lg shadow-emerald-600/15"
+              >
+                Check In
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -460,32 +501,55 @@ const EmployeesMockPage = () => {
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Filters and Pagination State
+  const [searchText, setSearchText] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalDocs, setTotalDocs] = useState(0);
+
+  const loadEmployees = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params: any = {
+        page,
+        limit: 6, // 6 employee cards fits the grid layout perfectly
+        sortBy: 'employeeId',
+        sortOrder: 'asc',
+      };
+
+      if (searchText.trim()) params.name = searchText.trim();
+      if (deptFilter) params.department = deptFilter;
+
+      const response = await api.get('/employees', { params });
+      const data = response.data?.data;
+      setEmployees((data?.employees || []).map(mapProfileToEmployee));
+      setTotalDocs(data?.pagination?.total || 0);
+      setTotalPages(data?.pagination?.pages || 1);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Unable to load employees.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let active = true;
-
-    const loadEmployees = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await api.get('/employees', { params: { limit: 12, sortBy: 'employeeId', sortOrder: 'asc' } });
-        if (!active) return;
-        setEmployees((response.data?.data?.employees || []).map(mapProfileToEmployee));
-      } catch (err: any) {
-        if (!active) return;
-        setError(err.response?.data?.message || 'Unable to load employees.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
     loadEmployees();
+  }, [page, deptFilter]);
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  // Debounce search input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setPage(1);
+      loadEmployees();
+    }, 450);
+
+    return () => clearTimeout(handler);
+  }, [searchText]);
 
   return (
     <div className="space-y-6">
@@ -493,6 +557,46 @@ const EmployeesMockPage = () => {
           <div>
             <h1 className="text-2xl font-bold text-slate-100">All Employees</h1>
             <p className="text-xs text-slate-500 mt-1">Manage and view employee profile files and attendance statuses.</p>
+          </div>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl px-5 py-3 transition-colors shadow-lg shadow-indigo-500/15"
+          >
+            Add Employee
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-slate-900/20 border border-slate-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row gap-4 backdrop-blur-xl">
+          {/* Search Input */}
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Search employee by name..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl pl-9 pr-4 py-3 outline-none focus:border-indigo-500 transition-colors"
+            />
+            <svg className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          
+          {/* Department Select */}
+          <div className="w-full md:w-48">
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="">All Departments</option>
+              <option value="HR">HR</option>
+              <option value="Engineering">Engineering</option>
+              <option value="Sales">Sales</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Finance">Finance</option>
+              <option value="Operations">Operations</option>
+            </select>
           </div>
         </div>
 
@@ -523,11 +627,53 @@ const EmployeesMockPage = () => {
           )}
         </div>
 
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center bg-slate-900/40 border border-slate-800 rounded-3xl px-6 py-4 text-xs">
+            <span className="text-slate-500 font-medium">
+              Showing page {page} of {totalPages} ({totalDocs} total employees)
+            </span>
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                disabled={page === 1 || loading}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-300 font-semibold hover:border-slate-700 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={page === totalPages || loading}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-300 font-semibold hover:border-slate-700 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Modal Overlay */}
         {selectedEmployee && (
           <EmployeeProfileModal
             employee={selectedEmployee}
             onClose={() => setSelectedEmployee(null)}
+            onDeleteSuccess={() => {
+              setSelectedEmployee(null);
+              loadEmployees();
+            }}
+          />
+        )}
+
+        {/* Add Employee Modal Overlay */}
+        {isAddModalOpen && (
+          <AddEmployeeModal
+            onClose={() => setIsAddModalOpen(false)}
+            onSuccess={() => {
+              setIsAddModalOpen(false);
+              loadEmployees();
+            }}
           />
         )}
     </div>
@@ -548,7 +694,7 @@ function App() {
 
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/signup" element={<Navigate to="/login" replace />} />
 
         {/* Employee */}
         <Route element={<EmployeeLayout />}>

@@ -46,7 +46,7 @@ const getStoredUser = (): UserPayload | null => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<UserPayload | null>(() => getStoredUser());
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('hrms_token'));
   const [role, setRole] = useState<UserRole | null>(() => getStoredUser()?.role ?? null);
   const [loading, setLoading] = useState(true);
 
@@ -56,12 +56,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRole(nextUser.role);
 
     if (nextToken) {
+      localStorage.setItem('hrms_token', nextToken);
       setToken(nextToken);
     }
   }, []);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem('hrms_token');
     setCurrentUser(null);
     setToken(null);
     setRole(null);

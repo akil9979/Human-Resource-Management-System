@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchEmployees = exports.createEmployee = exports.generateEmployeeId = void 0;
+exports.deleteEmployee = exports.searchEmployees = exports.createEmployee = exports.generateEmployeeId = void 0;
 const user_js_1 = __importDefault(require("../models/user.js"));
 const employeeProfile_js_1 = __importDefault(require("../models/employeeProfile.js"));
 const notification_js_1 = require("./notification.js");
@@ -65,8 +65,8 @@ const createEmployee = async (req, res) => {
     if (!allowedRoles.includes(requestedRole)) {
         return res.status(400).json({ status: 'error', message: `Invalid role. Allowed roles are: ${allowedRoles.join(', ')}` });
     }
-    if (req.user?.role === 'HR' && requestedRole !== 'Employee') {
-        return res.status(403).json({ status: 'error', message: 'HR can only create Employee accounts' });
+    if (req.user?.role !== 'Admin') {
+        return res.status(403).json({ status: 'error', message: 'Only administrators are authorized to create accounts' });
     }
     try {
         // Check if email already taken
@@ -184,3 +184,26 @@ const searchEmployees = async (req, res) => {
     }
 };
 exports.searchEmployees = searchEmployees;
+/**
+ * DELETE /api/employees/:id
+ * Admin-only endpoint to delete an employee profile and user account.
+ */
+const deleteEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const profile = await employeeProfile_js_1.default.findOne({ user: id });
+        if (!profile) {
+            return res.status(404).json({ status: 'error', message: 'Employee profile not found' });
+        }
+        await employeeProfile_js_1.default.deleteOne({ user: id });
+        await user_js_1.default.findByIdAndDelete(id);
+        return res.status(200).json({
+            status: 'success',
+            message: 'Employee deleted successfully',
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+};
+exports.deleteEmployee = deleteEmployee;

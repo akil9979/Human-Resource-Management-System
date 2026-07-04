@@ -3,80 +3,24 @@ import { useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext.js';
 import api from '../services/api.js';
+import { isAdminOrHr } from '../utils/auth.js';
 
 type TabType = 'resume' | 'private' | 'salary' | 'security';
-
-// Inline mock data lookup for consistency
-const mockEmployees = [
-  {
-    id: 'emp_1',
-    employeeId: 'EMP-2025-0001',
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@company.com',
-    phone: '+1 (555) 123-4567',
-    department: 'Engineering',
-    designation: 'Senior Software Engineer',
-    dateOfJoining: '2025-01-15',
-    manager: 'Sarah Jenkins',
-    status: 'Active',
-    // Mock resume data
-    degree: 'Bachelor of Science in Computer Science',
-    institution: 'State University',
-    passingYear: '2022',
-    experience: '3+ years experience developing React and Node apps.',
-    skills: 'React, TypeScript, Node.js, Express, MongoDB, Tailwind CSS',
-    // Mock private info
-    gender: 'Male',
-    dateOfBirth: '2000-05-14',
-    address: '123 Silicon Valley Road, San Jose, CA',
-    emergencyName: 'Mary Doe',
-    emergencyRelationship: 'Spouse',
-    emergencyPhone: '+1 (555) 987-6543',
-    // Mock salary
-    basicSalary: 6500,
-    allowances: 1200,
-    deductions: 500,
-  },
-  {
-    id: 'emp_2',
-    employeeId: 'EMP-2025-0002',
-    firstName: 'Jane',
-    lastName: 'Smith',
-    email: 'jane.smith@company.com',
-    phone: '+1 (555) 234-5678',
-    department: 'HR',
-    designation: 'HR Lead',
-    dateOfJoining: '2025-02-10',
-    manager: 'Michael Chang',
-    status: 'Active',
-    degree: 'Master of Human Resources',
-    institution: 'Business School',
-    passingYear: '2020',
-    experience: '5+ years experience managing HR and employee lifecycles.',
-    skills: 'Talent Acquisition, Compliance, Payroll Management, Conflict Resolution',
-    gender: 'Female',
-    dateOfBirth: '1996-08-22',
-    address: '456 Oak Avenue, San Francisco, CA',
-    emergencyName: 'Robert Smith',
-    emergencyRelationship: 'Father',
-    emergencyPhone: '+1 (555) 876-5432',
-    basicSalary: 5500,
-    allowances: 900,
-    deductions: 400,
-  },
-];
 
 export const ProfilePage: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const { user } = useAuth();
+  const isAdminOrHR = isAdminOrHr(user?.role);
+
   const [activeTab, setActiveTab] = useState<TabType>('resume');
   const [isOwnProfile, setIsOwnProfile] = useState(true);
   const [profileData, setProfileData] = useState<any>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { register, handleSubmit, watch, setValue } = useForm();
 
   const handleAvatarClick = () => {
@@ -89,13 +33,11 @@ export const ProfilePage: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate size (5MB Limit)
     if (file.size > 5 * 1024 * 1024) {
       alert('File exceeds the 5MB size limit. Please upload a smaller image.');
       return;
     }
 
-    // Set preview locally
     const preview = URL.createObjectURL(file);
     setPreviewUrl(preview);
 
@@ -104,7 +46,7 @@ export const ProfilePage: React.FC = () => {
 
     setUploading(true);
     try {
-      const uId = profileData.user?._id || profileData.user;
+      const uId = id || user?.id;
       const response = await api.post(`/profile/${uId}/avatar`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -129,7 +71,7 @@ export const ProfilePage: React.FC = () => {
   const getAvatarUrl = () => {
     if (previewUrl) return previewUrl;
     if (profileData?.profilePicture) {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
       return `${baseUrl}${profileData.profilePicture}`;
     }
     return null;
@@ -141,55 +83,115 @@ export const ProfilePage: React.FC = () => {
   const deductions = watch('deductions', 0);
   const netSalary = Math.max(0, Number(basicSalary) + Number(allowances) - Number(deductions));
 
-  useEffect(() => {
-    // Resolve if own profile
-    if (!id || id === user?.id) {
-      setIsOwnProfile(true);
-      // Mock loading logged in user's profile
-      const loggedInEmp = mockEmployees.find(emp => emp.email === user?.email) || mockEmployees[0];
-      setProfileData(loggedInEmp);
-    } else {
-      setIsOwnProfile(false);
-      // Load specific employee's profile
-      const match = mockEmployees.find(emp => emp.id === id) || mockEmployees[0];
-      setProfileData(match);
+  const fetchProfile = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const targetUserId = id || user?.id;
+      if (!targetUserId) return;
+
+      const response = await api.get(`/profile/${targetUserId}`);
+      if (response.data?.status === 'success') {
+        setProfileData(response.data.data);
+      }
+    } catch (err: any) {
+      console.error('Error fetching profile:', err);
+      setError(err.response?.data?.message || 'Unable to load profile data.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    setIsOwnProfile(!id || id === user?.id);
+    fetchProfile();
   }, [id, user]);
 
   useEffect(() => {
     if (profileData) {
       // Pre-fill form inputs
-      setValue('degree', profileData.degree);
-      setValue('institution', profileData.institution);
-      setValue('passingYear', profileData.passingYear);
-      setValue('experience', profileData.experience);
-      setValue('skills', profileData.skills);
+      setValue('degree', profileData.certificates?.[0] || '');
+      setValue('institution', 'N/A');
+      setValue('passingYear', '');
+      setValue('experience', profileData.about || '');
+      setValue('skills', profileData.skills?.join(', ') || '');
       
-      setValue('gender', profileData.gender);
-      setValue('dateOfBirth', profileData.dateOfBirth);
-      setValue('phone', profileData.phone);
-      setValue('address', profileData.address);
-      setValue('emergencyName', profileData.emergencyName);
-      setValue('emergencyRelationship', profileData.emergencyRelationship);
-      setValue('emergencyPhone', profileData.emergencyPhone);
+      setValue('gender', profileData.gender || 'Other');
+      setValue('dateOfBirth', profileData.dateOfBirth ? new Date(profileData.dateOfBirth).toISOString().slice(0, 10) : '');
+      setValue('phone', profileData.contactNumber || '');
+      setValue('address', profileData.address || '');
+      setValue('emergencyName', profileData.emergencyContact?.name || '');
+      setValue('emergencyRelationship', profileData.emergencyContact?.relationship || '');
+      setValue('emergencyPhone', profileData.emergencyContact?.phone || '');
       
-      setValue('designation', profileData.designation);
-      setValue('department', profileData.department);
-      setValue('dateOfJoining', profileData.dateOfJoining);
-      setValue('basicSalary', profileData.basicSalary);
-      setValue('allowances', profileData.allowances);
-      setValue('deductions', profileData.deductions);
+      setValue('designation', profileData.designation || '');
+      setValue('department', profileData.department || '');
+      setValue('dateOfJoining', profileData.dateOfJoining ? new Date(profileData.dateOfJoining).toISOString().slice(0, 10) : '');
+      setValue('basicSalary', profileData.salary || 0);
+      setValue('allowances', 0);
+      setValue('deductions', 0);
     }
   }, [profileData, setValue]);
 
-  const onSubmit = (data: any) => {
-    console.log('Profile changes saved:', data);
-    alert('Dummy Profile Updated! (Check console for output)');
+  const onSubmit = async (data: any) => {
+    try {
+      const targetUserId = id || user?.id;
+      if (!targetUserId) return;
+
+      const payload: any = {
+        contactNumber: data.phone,
+        address: data.address,
+        about: data.experience,
+        skills: data.skills.split(',').map((s: string) => s.trim()).filter(Boolean),
+        emergencyContact: {
+          name: data.emergencyName,
+          relationship: data.emergencyRelationship,
+          phone: data.emergencyPhone,
+        },
+        gender: data.gender,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+      };
+
+      if (isAdminOrHR) {
+        payload.designation = data.designation;
+        payload.department = data.department;
+        payload.dateOfJoining = data.dateOfJoining ? new Date(data.dateOfJoining) : undefined;
+        payload.salary = Number(data.basicSalary);
+      }
+
+      const response = await api.put(`/profile/${targetUserId}`, payload);
+      if (response.data?.status === 'success') {
+        alert('Profile updated successfully!');
+        setProfileData(response.data.data);
+      }
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      alert(err.response?.data?.message || 'Failed to update profile.');
+    }
   };
 
-  if (!profileData) {
+  if (loading) {
     return (
-      <div className="text-center py-12 text-slate-400 font-sans">Loading Profile details...</div>
+      <div className="flex items-center justify-center h-64 font-sans">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs text-slate-500 font-semibold">Loading profile details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !profileData) {
+    return (
+      <div className="text-center py-12 text-slate-400 font-sans">
+        <p className="font-semibold text-rose-400 mb-4">{error || 'Profile not found'}</p>
+        <button 
+          onClick={fetchProfile}
+          className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl"
+        >
+          Retry
+        </button>
+      </div>
     );
   }
 
@@ -238,7 +240,7 @@ export const ProfilePage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-100">{profileData.firstName} {profileData.lastName}</h1>
             <p className="text-indigo-400 font-semibold mt-0.5 text-sm">{profileData.designation} &bull; {profileData.department}</p>
-            <p className="text-slate-500 text-xs mt-1">Status: <strong className="text-emerald-400">Active</strong></p>
+            <p className="text-slate-500 text-xs mt-1">Status: <strong className="text-emerald-400">{profileData.status || 'Active'}</strong></p>
           </div>
         </div>
 

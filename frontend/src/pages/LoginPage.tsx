@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
 import { useAuth } from '../context/AuthContext';
 import { getRoleRedirectPath } from '../utils/auth';
@@ -127,12 +127,6 @@ export const LoginPage: React.FC = () => {
           )}
         </button>
 
-        <p className="text-center text-sm text-slate-400 mt-6">
-          Don't have an account?{' '}
-          <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-semibold hover:underline">
-            Register here
-          </Link>
-        </p>
       </form>
     </AuthLayout>
   );

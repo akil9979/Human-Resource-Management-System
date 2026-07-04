@@ -71,11 +71,12 @@ const signup = async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters long' });
     }
     const allowedRoles = ['Admin', 'HR', 'Employee'];
-    const userRole = role || 'Employee';
+    const userCount = await user_js_1.default.countDocuments();
+    const userRole = userCount === 0 ? 'Admin' : (role || 'Employee');
     if (!allowedRoles.includes(userRole)) {
         return res.status(400).json({ status: 'error', message: `Invalid role. Allowed roles are: ${allowedRoles.join(', ')}` });
     }
-    if (userRole !== 'Employee') {
+    if (userRole !== 'Employee' && userCount > 0) {
         return res.status(403).json({
             status: 'error',
             message: 'Only an administrator can create HR or Admin accounts',

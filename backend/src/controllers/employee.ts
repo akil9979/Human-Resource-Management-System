@@ -95,8 +95,8 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ status: 'error', message: `Invalid role. Allowed roles are: ${allowedRoles.join(', ')}` });
   }
 
-  if (req.user?.role === 'HR' && requestedRole !== 'Employee') {
-    return res.status(403).json({ status: 'error', message: 'HR can only create Employee accounts' });
+  if (req.user?.role !== 'Admin') {
+    return res.status(403).json({ status: 'error', message: 'Only administrators are authorized to create accounts' });
   }
 
   try {
@@ -227,6 +227,31 @@ export const searchEmployees = async (req: Request, res: Response) => {
           pages: Math.ceil(total / limitNum),
         },
       },
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: (error as Error).message });
+  }
+};
+
+/**
+ * DELETE /api/employees/:id
+ * Admin-only endpoint to delete an employee profile and user account.
+ */
+export const deleteEmployee = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const profile = await EmployeeProfile.findOne({ user: id });
+    if (!profile) {
+      return res.status(404).json({ status: 'error', message: 'Employee profile not found' });
+    }
+
+    await EmployeeProfile.deleteOne({ user: id });
+    await User.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Employee deleted successfully',
     });
   } catch (error) {
     return res.status(500).json({ status: 'error', message: (error as Error).message });

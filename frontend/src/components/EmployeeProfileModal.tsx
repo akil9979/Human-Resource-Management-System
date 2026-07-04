@@ -1,13 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmployeeData } from './EmployeeCard.js';
+import { useAuth } from '../context/AuthContext.js';
+import api from '../services/api.js';
 
 interface EmployeeProfileModalProps {
   employee: EmployeeData;
   onClose: () => void;
+  onDeleteSuccess?: () => void;
 }
 
-export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({ employee, onClose }) => {
+export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
+  employee,
+  onClose,
+  onDeleteSuccess,
+}) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const getInitials = () => {
     return `${employee.firstName[0] || 'E'}${employee.lastName[0] || 'P'}`.toUpperCase();
   };
@@ -18,10 +29,41 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({ empl
     { label: 'Phone Number', value: employee.phone },
     { label: 'Department', value: employee.department },
     { label: 'Designation', value: employee.designation },
-    { label: 'Date of Joining', value: new Date(employee.dateOfJoining).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) },
+    {
+      label: 'Date of Joining',
+      value: new Date(employee.dateOfJoining).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    },
     { label: 'Reporting Manager', value: employee.manager },
     { label: 'Account Status', value: employee.status },
   ];
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${employee.firstName} ${employee.lastName}? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await api.delete(`/employees/${employee.id}`);
+      if (response.data?.status === 'success') {
+        alert('Employee deleted successfully.');
+        if (onDeleteSuccess) {
+          onDeleteSuccess();
+        } else {
+          onClose();
+        }
+      }
+    } catch (error: any) {
+      console.error('Error deleting employee:', error);
+      alert(error.response?.data?.message || 'Failed to delete employee account.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4 sm:p-6 font-sans">
@@ -73,21 +115,35 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({ empl
         </div>
 
         {/* Footer actions */}
-        <div className="mt-8 pt-6 border-t border-slate-800/60 flex justify-end space-x-3">
-          <Link
-            to={`/profile/${employee.id}`}
-            onClick={onClose}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center"
-          >
-            View Full Profile
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700/60 transition-colors"
-          >
-            Close
-          </button>
+        <div className="mt-8 pt-6 border-t border-slate-800/60 flex justify-between items-center">
+          <div>
+            {isAdmin && (
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="px-4 py-2 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 hover:border-transparent text-rose-400 hover:text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Employee'}
+              </button>
+            )}
+          </div>
+          <div className="flex space-x-3">
+            <Link
+              to={`/profile/${employee.id}`}
+              onClick={onClose}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center"
+            >
+              View Full Profile
+            </Link>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700/60 transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

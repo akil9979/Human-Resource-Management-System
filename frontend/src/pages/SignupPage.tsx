@@ -45,7 +45,7 @@ export const SignupPage: React.FC = () => {
         email: data.email,
         phone: data.phone,
         password: data.password,
-        role: 'Employee',
+        role: 'Admin',
       });
 
       setSuccessMessage('Account created successfully. Signing you in...');

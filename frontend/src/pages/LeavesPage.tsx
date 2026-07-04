@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.js';
 import { isAdminOrHr } from '../utils/auth.js';
+import api from '../services/api.js';
 
 // Leave Request Interface
 interface LeaveRequest {
@@ -15,65 +16,6 @@ interface LeaveRequest {
   status: 'Pending' | 'Approved' | 'Rejected';
   adminComment?: string;
 }
-
-// Initial Mock Leaves Data
-const initialLeaves: LeaveRequest[] = [
-  {
-    id: 'leave_1',
-    employeeName: 'John Doe',
-    employeeEmail: 'john.doe@company.com',
-    leaveType: 'Sick',
-    startDate: '2026-07-06',
-    endDate: '2026-07-08',
-    reason: 'Dental surgery and recovery time.',
-    attachment: 'medical-certificate.pdf',
-    status: 'Approved',
-    adminComment: 'Get well soon!',
-  },
-  {
-    id: 'leave_2',
-    employeeName: 'John Doe',
-    employeeEmail: 'john.doe@company.com',
-    leaveType: 'Paid',
-    startDate: '2026-07-20',
-    endDate: '2026-07-24',
-    reason: 'Family summer vacation outing.',
-    status: 'Pending',
-  },
-  {
-    id: 'leave_3',
-    employeeName: 'Jane Smith',
-    employeeEmail: 'jane.smith@company.com',
-    leaveType: 'Unpaid',
-    startDate: '2026-07-13',
-    endDate: '2026-07-14',
-    reason: 'Personal urgent relocation matters.',
-    status: 'Pending',
-  },
-  {
-    id: 'leave_4',
-    employeeName: 'Alice Johnson',
-    employeeEmail: 'alice.j@company.com',
-    leaveType: 'Paid',
-    startDate: '2026-06-15',
-    endDate: '2026-06-18',
-    reason: 'Attending sibling wedding ceremony.',
-    status: 'Approved',
-    adminComment: 'Approved. Enjoy the celebration.',
-  },
-  {
-    id: 'leave_5',
-    employeeName: 'Jane Smith',
-    employeeEmail: 'jane.smith@company.com',
-    leaveType: 'Sick',
-    startDate: '2026-06-02',
-    endDate: '2026-06-03',
-    reason: 'Severe food poisoning doctor bedrest.',
-    attachment: 'medical-report-june.jpg',
-    status: 'Rejected',
-    adminComment: 'Documentation date does not match the requested dates.',
-  },
-];
 
 // Reusable Stat Card
 interface StatCardProps {
@@ -96,9 +38,11 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtext, colorClass }
 export const LeavesPage: React.FC = () => {
   const { user } = useAuth();
   const isAdminOrHR = isAdminOrHr(user?.role);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Leaves Master List State
-  const [leaves, setLeaves] = useState<LeaveRequest[]>(initialLeaves);
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Filters State
   const [searchText, setSearchText] = useState('');
@@ -122,18 +66,68 @@ export const LeavesPage: React.FC = () => {
     startDate: '',
     endDate: '',
     reason: '',
+    attachmentFile: null as File | null,
     attachmentName: '',
   });
 
-  // 1. Employee Leave Balances (Mock)
-  const employeeBalances = useMemo(() => {
-    // John Doe's sample balances
-    return {
-      paidRemaining: '12 / 15 days',
-      sickRemaining: '6 / 8 days',
-      unpaidTaken: '2 days taken',
-    };
+  // Leave Balances / Counts State
+  const [summaryStats, setSummaryStats] = useState({
+    paidRemaining: 18,
+    sickRemaining: 10,
+    unpaidTaken: 0,
+    pendingCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
+  });
+
+  // Fetch Leaves from Backend
+  const fetchLeaves = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/leaves', {
+        params: {
+          limit: 100, // Retrieve up to 100 records for comprehensive local filtering
+        },
+      });
+
+      if (response.data?.status === 'success') {
+        const apiLeaves = response.data.data.leaves || [];
+        const mapped: LeaveRequest[] = apiLeaves.map((l: any) => ({
+          id: l._id,
+          employeeName: l.employee?.firstName ? `${l.employee.firstName} ${l.employee.lastName}` : l.employee?.email || 'N/A',
+          employeeEmail: l.employee?.email || 'N/A',
+          leaveType: l.leaveType,
+          startDate: new Date(l.startDate).toISOString().slice(0, 10),
+          endDate: new Date(l.endDate).toISOString().slice(0, 10),
+          reason: l.reason || '',
+          attachment: l.attachment || undefined,
+          status: l.status,
+          adminComment: l.adminComment || '',
+        }));
+
+        setLeaves(mapped);
+        if (response.data.data.summary) {
+          setSummaryStats(response.data.data.summary);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching leaves:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeaves();
   }, []);
+
+  const employeeBalances = useMemo(() => {
+    return {
+      paidRemaining: `${summaryStats.paidRemaining} / 18 days`,
+      sickRemaining: `${summaryStats.sickRemaining} / 10 days`,
+      unpaidTaken: `${summaryStats.unpaidTaken} days taken`,
+    };
+  }, [summaryStats]);
 
   // Filtered leaves list for Active Employee
   const employeeLeaves = useMemo(() => {
@@ -152,7 +146,7 @@ export const LeavesPage: React.FC = () => {
   }, [leaves, searchText, typeFilter, statusFilter]);
 
   // Handle Apply Leave Form Submissions
-  const handleApplySubmit = (e: React.FormEvent) => {
+  const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!applyForm.startDate || !applyForm.endDate || !applyForm.reason) {
       alert('Please fill out all mandatory parameters.');
@@ -164,29 +158,40 @@ export const LeavesPage: React.FC = () => {
       return;
     }
 
-    const newRequest: LeaveRequest = {
-      id: `leave_${Date.now()}`,
-      employeeName: 'Logged In Employee',
-      employeeEmail: user?.email || 'employee@company.com',
-      leaveType: applyForm.leaveType,
-      startDate: applyForm.startDate,
-      endDate: applyForm.endDate,
-      reason: applyForm.reason,
-      attachment: applyForm.attachmentName || undefined,
-      status: 'Pending',
-    };
+    try {
+      const formData = new FormData();
+      formData.append('leaveType', applyForm.leaveType);
+      formData.append('startDate', applyForm.startDate);
+      formData.append('endDate', applyForm.endDate);
+      formData.append('reason', applyForm.reason);
+      if (applyForm.attachmentFile) {
+        formData.append('attachment', applyForm.attachmentFile);
+      }
 
-    setLeaves(prev => [newRequest, ...prev]);
-    setIsApplyModalOpen(false);
-    // Reset Form
-    setApplyForm({
-      leaveType: 'Paid',
-      startDate: '',
-      endDate: '',
-      reason: '',
-      attachmentName: '',
-    });
-    alert('Leave request submitted successfully.');
+      const response = await api.post('/leaves', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data?.status === 'success') {
+        alert('Leave request submitted successfully.');
+        setIsApplyModalOpen(false);
+        // Reset Form
+        setApplyForm({
+          leaveType: 'Paid',
+          startDate: '',
+          endDate: '',
+          reason: '',
+          attachmentFile: null,
+          attachmentName: '',
+        });
+        fetchLeaves();
+      }
+    } catch (error: any) {
+      console.error('Error applying leave:', error);
+      alert(error.response?.data?.message || 'Failed to submit leave request.');
+    }
   };
 
   // Open Approval/Rejection Dialog
@@ -200,24 +205,25 @@ export const LeavesPage: React.FC = () => {
   };
 
   // Handle Approval/Rejection Submissions
-  const handleReviewSave = () => {
+  const handleReviewSave = async () => {
     if (!reviewTarget) return;
 
-    setLeaves(prev =>
-      prev.map(item =>
-        item.id === reviewTarget.leaveId
-          ? {
-              ...item,
-              status: reviewTarget.action,
-              adminComment: reviewTarget.comment.trim() || undefined,
-            }
-          : item
-      )
-    );
+    try {
+      const response = await api.patch(`/leaves/${reviewTarget.leaveId}/status`, {
+        status: reviewTarget.action,
+        adminComment: reviewTarget.comment.trim() || undefined,
+      });
 
-    setIsReviewModalOpen(false);
-    setReviewTarget(null);
-    alert(`Leave request has been successfully ${reviewTarget.action.toLowerCase()}.`);
+      if (response.data?.status === 'success') {
+        alert(`Leave request has been successfully ${reviewTarget.action.toLowerCase()}.`);
+        setIsReviewModalOpen(false);
+        setReviewTarget(null);
+        fetchLeaves();
+      }
+    } catch (error: any) {
+      console.error('Error reviewing leave:', error);
+      alert(error.response?.data?.message || 'Failed to update leave request status.');
+    }
   };
 
   const getStatusBadge = (status: LeaveRequest['status']) => {
@@ -245,6 +251,11 @@ export const LeavesPage: React.FC = () => {
     }
   };
 
+  const handleDownloadAttachment = (attachmentPath: string) => {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    window.open(`${baseUrl}${attachmentPath}`, '_blank');
+  };
+
   return (
     <div className="space-y-6 font-sans">
         
@@ -269,222 +280,239 @@ export const LeavesPage: React.FC = () => {
           )}
         </div>
 
-        {/* ---------------- EMPLOYEE VIEW ---------------- */}
-        {!isAdminOrHR && (
-          <div className="space-y-6">
-            {/* Balances Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <StatCard
-                title="Paid Leaves Remaining"
-                value={employeeBalances.paidRemaining}
-                subtext="Annual personal leave quota"
-                colorClass="text-indigo-400"
-              />
-              <StatCard
-                title="Sick Leaves Remaining"
-                value={employeeBalances.sickRemaining}
-                subtext="Medical / Wellness logs balance"
-                colorClass="text-emerald-400"
-              />
-              <StatCard
-                title="Unpaid Leaves Logged"
-                value={employeeBalances.unpaidTaken}
-                subtext="Unpaid leaves registered"
-                colorClass="text-amber-400"
-              />
-            </div>
-
-            {/* Leave History List */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl shadow-xl">
-              <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-slate-200">Leave Applications History</h3>
-                <span className="text-xs text-slate-500 font-medium">{employeeLeaves.length} logs</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800/80 bg-slate-950/20 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                      <th className="px-6 py-3.5">Duration (Dates)</th>
-                      <th className="px-6 py-3.5">Leave Type</th>
-                      <th className="px-6 py-3.5">Remarks / Reason</th>
-                      <th className="px-6 py-3.5">Attachment</th>
-                      <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5">Admin Comment</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-xs font-semibold text-slate-300">
-                    {employeeLeaves.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="px-6 py-4 text-slate-200">
-                          {item.startDate} &rarr; {item.endDate}
-                        </td>
-                        <td className="px-6 py-4">{item.leaveType} Leave</td>
-                        <td className="px-6 py-4 max-w-xs truncate text-slate-400" title={item.reason}>
-                          {item.reason}
-                        </td>
-                        <td className="px-6 py-4">
-                          {item.attachment ? (
-                            <span className="text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                              </svg>
-                              <span className="text-[10px] truncate max-w-[80px]">{item.attachment}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
-                        <td className="px-6 py-4 text-slate-500 italic max-w-xs truncate" title={item.adminComment}>
-                          {item.adminComment || '-'}
-                        </td>
-                      </tr>
-                    ))}
-                    {employeeLeaves.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                          No leave applications submitted yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+        {loading && leaves.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex flex-col items-center space-y-3">
+              <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs text-slate-500 font-semibold">Loading leave requests...</p>
             </div>
           </div>
-        )}
+        ) : (
+          <>
+            {/* ---------------- EMPLOYEE VIEW ---------------- */}
+            {!isAdminOrHR && (
+              <div className="space-y-6">
+                {/* Balances Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <StatCard
+                    title="Paid Leaves Remaining"
+                    value={employeeBalances.paidRemaining}
+                    subtext="Annual personal leave quota"
+                    colorClass="text-indigo-400"
+                  />
+                  <StatCard
+                    title="Sick Leaves Remaining"
+                    value={employeeBalances.sickRemaining}
+                    subtext="Medical / Wellness logs balance"
+                    colorClass="text-emerald-400"
+                  />
+                  <StatCard
+                    title="Unpaid Leaves Logged"
+                    value={employeeBalances.unpaidTaken}
+                    subtext="Unpaid leaves registered"
+                    colorClass="text-amber-400"
+                  />
+                </div>
 
-        {/* ---------------- ADMIN VIEW ---------------- */}
-        {isAdminOrHR && (
-          <div className="space-y-6">
-            
-            {/* Admin Filter bar */}
-            <div className="bg-slate-900/20 border border-slate-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row gap-4 backdrop-blur-xl">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search employee name or email..."
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl pl-9 pr-4 py-3 outline-none focus:border-indigo-500 transition-colors"
-                />
-                <svg className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                {/* Leave History List */}
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl shadow-xl">
+                  <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-slate-200">Leave Applications History</h3>
+                    <span className="text-xs text-slate-500 font-medium">{employeeLeaves.length} logs</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800/80 bg-slate-950/20 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                          <th className="px-6 py-3.5">Duration (Dates)</th>
+                          <th className="px-6 py-3.5">Leave Type</th>
+                          <th className="px-6 py-3.5">Remarks / Reason</th>
+                          <th className="px-6 py-3.5">Attachment</th>
+                          <th className="px-6 py-3.5">Status</th>
+                          <th className="px-6 py-3.5">Admin Comment</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-xs font-semibold text-slate-300">
+                        {employeeLeaves.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="px-6 py-4 text-slate-200">
+                              {item.startDate} &rarr; {item.endDate}
+                            </td>
+                            <td className="px-6 py-4">{item.leaveType} Leave</td>
+                            <td className="px-6 py-4 max-w-xs truncate text-slate-400" title={item.reason}>
+                              {item.reason}
+                            </td>
+                            <td className="px-6 py-4">
+                              {item.attachment ? (
+                                <span 
+                                  onClick={() => handleDownloadAttachment(item.attachment!)}
+                                  className="text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                  </svg>
+                                  <span className="text-[10px] truncate max-w-[80px]">View Attachment</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-600">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
+                            <td className="px-6 py-4 text-slate-500 italic max-w-xs truncate" title={item.adminComment}>
+                              {item.adminComment || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                        {employeeLeaves.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                              No leave applications submitted yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
+            )}
 
-              {/* Leave Type filter */}
-              <div className="w-full md:w-44">
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="">All Leave Types</option>
-                  <option value="Paid">Paid Leave</option>
-                  <option value="Sick">Sick Leave</option>
-                  <option value="Unpaid">Unpaid Leave</option>
-                </select>
-              </div>
+            {/* ---------------- ADMIN VIEW ---------------- */}
+            {isAdminOrHR && (
+              <div className="space-y-6">
+                
+                {/* Admin Filter bar */}
+                <div className="bg-slate-900/20 border border-slate-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row gap-4 backdrop-blur-xl">
+                  {/* Search */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="Search employee name or email..."
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl pl-9 pr-4 py-3 outline-none focus:border-indigo-500 transition-colors"
+                    />
+                    <svg className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
 
-              {/* Status filter */}
-              <div className="w-full md:w-44">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-              </div>
-            </div>
+                  {/* Leave Type filter */}
+                  <div className="w-full md:w-44">
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                      className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="">All Leave Types</option>
+                      <option value="Paid">Paid Leave</option>
+                      <option value="Sick">Sick Leave</option>
+                      <option value="Unpaid">Unpaid Leave</option>
+                    </select>
+                  </div>
 
-            {/* Admin Table Registry */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl shadow-xl">
-              <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-slate-200">Staff Leave Applications</h3>
-                <span className="text-xs text-slate-500 font-medium">{filteredLeaves.length} records</span>
+                  {/* Status filter */}
+                  <div className="w-full md:w-44">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full bg-slate-950/80 border border-slate-800 text-slate-100 text-xs font-semibold rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Admin Table Registry */}
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl shadow-xl">
+                  <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-slate-200">Staff Leave Applications</h3>
+                    <span className="text-xs text-slate-500 font-medium">{filteredLeaves.length} records</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800/80 bg-slate-950/20 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                          <th className="px-6 py-3.5">Employee</th>
+                          <th className="px-6 py-3.5">Leave Type</th>
+                          <th className="px-6 py-3.5">Date Range</th>
+                          <th className="px-6 py-3.5">Remarks</th>
+                          <th className="px-6 py-3.5">Attachment</th>
+                          <th className="px-6 py-3.5">Status</th>
+                          <th className="px-6 py-3.5">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-xs font-semibold text-slate-300">
+                        {filteredLeaves.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="px-6 py-4">
+                              <div>
+                                <p className="text-slate-200 font-bold">{item.employeeName}</p>
+                                <p className="text-[10px] text-slate-500 font-medium mt-0.5">{item.employeeEmail}</p>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">{item.leaveType} Leave</td>
+                            <td className="px-6 py-4 text-slate-200">
+                              {item.startDate} &rarr; {item.endDate}
+                            </td>
+                            <td className="px-6 py-4 max-w-xs truncate text-slate-400" title={item.reason}>
+                              {item.reason}
+                            </td>
+                            <td className="px-6 py-4">
+                              {item.attachment ? (
+                                <span 
+                                  onClick={() => handleDownloadAttachment(item.attachment!)}
+                                  className="text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                  </svg>
+                                  <span className="text-[10px] truncate max-w-[80px]">View File</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-600">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
+                            <td className="px-6 py-4">
+                              {item.status === 'Pending' ? (
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => triggerReview(item.id, 'Approved')}
+                                    className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => triggerReview(item.id, 'Rejected')}
+                                    className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-500 text-[10px] italic">Resolved</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredLeaves.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                              No matching leave requests found.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800/80 bg-slate-950/20 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                      <th className="px-6 py-3.5">Employee</th>
-                      <th className="px-6 py-3.5">Leave Type</th>
-                      <th className="px-6 py-3.5">Date Range</th>
-                      <th className="px-6 py-3.5">Remarks</th>
-                      <th className="px-6 py-3.5">Attachment</th>
-                      <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-xs font-semibold text-slate-300">
-                    {filteredLeaves.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="px-6 py-4">
-                          <div>
-                            <p className="text-slate-200 font-bold">{item.employeeName}</p>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{item.employeeEmail}</p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">{item.leaveType} Leave</td>
-                        <td className="px-6 py-4 text-slate-200">
-                          {item.startDate} &rarr; {item.endDate}
-                        </td>
-                        <td className="px-6 py-4 max-w-xs truncate text-slate-400" title={item.reason}>
-                          {item.reason}
-                        </td>
-                        <td className="px-6 py-4">
-                          {item.attachment ? (
-                            <span className="text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                              </svg>
-                              <span className="text-[10px] truncate max-w-[80px]">{item.attachment}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
-                        <td className="px-6 py-4">
-                          {item.status === 'Pending' ? (
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => triggerReview(item.id, 'Approved')}
-                                className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => triggerReview(item.id, 'Rejected')}
-                                className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all"
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 text-[10px] italic">Resolved</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredLeaves.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                          No matching leave requests found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* ---------------- EMPLOYEE APPLY LEAVE MODAL ---------------- */}
@@ -545,7 +573,7 @@ export const LeavesPage: React.FC = () => {
                   />
                 </div>
 
-                {/* Attachment Selector (Mock) */}
+                {/* Attachment Selector */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-400">Attachment (Optional)</label>
                   <div className="flex items-center space-x-3">
@@ -556,12 +584,27 @@ export const LeavesPage: React.FC = () => {
                       value={applyForm.attachmentName}
                       className="flex-1 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-semibold rounded-xl px-4 py-3 outline-none"
                     />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setApplyForm(prev => ({
+                            ...prev,
+                            attachmentFile: file,
+                            attachmentName: file.name,
+                          }));
+                        }
+                      }}
+                    />
                     <button
                       type="button"
-                      onClick={() => setApplyForm(prev => ({ ...prev, attachmentName: 'medical-cert.pdf' }))}
+                      onClick={() => fileInputRef.current?.click()}
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-xl px-4 py-3 border border-slate-700 transition-colors"
                     >
-                      Attach Cert
+                      Attach File
                     </button>
                   </div>
                 </div>

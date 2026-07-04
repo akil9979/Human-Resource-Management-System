@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 const db_js_1 = require("./config/db.js");
+const bootstrap_js_1 = require("./config/bootstrap.js");
 const auth_js_1 = __importDefault(require("./routes/auth.js"));
 const employee_js_1 = __importDefault(require("./routes/employee.js"));
 const profile_js_1 = __importDefault(require("./routes/profile.js"));
@@ -18,7 +19,11 @@ const notification_js_1 = __importDefault(require("./routes/notification.js"));
 // Load environment variables
 dotenv_1.default.config({ override: true });
 // Connect to Database
-(0, db_js_1.connectDB)();
+const initApp = async () => {
+    await (0, db_js_1.connectDB)();
+    await (0, bootstrap_js_1.bootstrapAdmin)();
+};
+initApp();
 const app = (0, express_1.default)();
 const defaultAllowedOrigins = [
     'http://localhost:3000',

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { connectDB } from './config/db.js';
+import { bootstrapAdmin } from './config/bootstrap.js';
 import authRoutes from './routes/auth.js';
 import employeeRoutes from './routes/employee.js';
 import profileRoutes from './routes/profile.js';
@@ -15,7 +16,11 @@ import notificationRoutes from './routes/notification.js';
 dotenv.config({ override: true });
 
 // Connect to Database
-connectDB();
+const initApp = async () => {
+  await connectDB();
+  await bootstrapAdmin();
+};
+initApp();
 
 const app = express();
 

@@ -49,6 +49,7 @@ export const AttendancePage: React.FC = () => {
   // State Bindings
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [todayLog, setTodayLog] = useState<AttendanceLog | null>(null);
   
   // Filtering & Pagination States
   const [searchText, setSearchText] = useState('');
@@ -65,6 +66,8 @@ export const AttendancePage: React.FC = () => {
     presentCount: 0,
     leaveCount: 0,
   });
+
+  const getTodayDateString = () => new Date().toISOString().slice(0, 10);
 
   // Time & Date formatting helpers
   const formatTime = (isoString?: string) => {
@@ -112,6 +115,15 @@ export const AttendancePage: React.FC = () => {
           setSummaryStats(summary);
         }
       }
+
+      // Check check-in status for today specifically
+      if (!isAdminOrHR) {
+        const todayResponse = await api.get('/attendance', {
+          params: { date: getTodayDateString(), limit: 1 },
+        });
+        const todayDocs = todayResponse.data?.data?.docs || [];
+        setTodayLog(todayDocs[0] || null);
+      }
     } catch (error) {
       console.error('Error fetching attendance logs:', error);
     } finally {
@@ -133,6 +145,34 @@ export const AttendancePage: React.FC = () => {
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchText]);
+
+  const handleCheckIn = async () => {
+    try {
+      const response = await api.post('/attendance/check-in', {
+        location: 'Office',
+      });
+      if (response.data?.status === 'success') {
+        alert('Checked in successfully!');
+        fetchLogs(currentPage);
+      }
+    } catch (error: any) {
+      console.error('Error checking in:', error);
+      alert(error.response?.data?.message || 'Failed to check in.');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    try {
+      const response = await api.put('/attendance/check-out');
+      if (response.data?.status === 'success') {
+        alert('Checked out successfully!');
+        fetchLogs(currentPage);
+      }
+    } catch (error: any) {
+      console.error('Error checking out:', error);
+      alert(error.response?.data?.message || 'Failed to check out.');
+    }
+  };
 
   const getStatusBadge = (status: AttendanceLog['status']) => {
     switch (status) {
@@ -201,33 +241,68 @@ export const AttendancePage: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* ---------------- EMPLOYEE VIEW SUMMARY CARDS ---------------- */}
+            {/* ---------------- EMPLOYEE VIEW SUMMARY CARDS & LOGGER ---------------- */}
             {!isAdminOrHR && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard
-                  title="Working Hours"
-                  value={`${summaryStats.workHours} hrs`}
-                  subtext="Cumulative active shift time"
-                  colorClass="text-indigo-400"
-                />
-                <StatCard
-                  title="Extra Hours (OT)"
-                  value={`${summaryStats.extraHours} hrs`}
-                  subtext="Overtime hours (>8 hr shifts)"
-                  colorClass="text-purple-400"
-                />
-                <StatCard
-                  title="Present Days"
-                  value={summaryStats.presentCount}
-                  subtext="Total logs checked-in"
-                  colorClass="text-emerald-400"
-                />
-                <StatCard
-                  title="Leaves Logged"
-                  value={summaryStats.leaveCount}
-                  subtext="Approved leave logs this month"
-                  colorClass="text-rose-400"
-                />
+              <div className="space-y-6">
+                {/* Check In / Out Quick Logger Panel */}
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Daily Attendance Logger</h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {todayLog?.checkIn 
+                        ? `Status: Checked in at ${formatTime(todayLog.checkIn)}${todayLog.checkOut ? ` and checked out at ${formatTime(todayLog.checkOut)}` : ''}`
+                        : 'Status: Not checked in for today yet'}
+                    </p>
+                  </div>
+                  <div>
+                    {todayLog?.checkIn && !todayLog?.checkOut ? (
+                      <button
+                        onClick={handleCheckOut}
+                        className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl px-5 py-3 transition-colors shadow-lg shadow-rose-600/15"
+                      >
+                        Check Out
+                      </button>
+                    ) : todayLog?.checkOut ? (
+                      <span className="bg-slate-800 text-slate-400 font-bold text-xs rounded-xl px-5 py-3 border border-slate-700">
+                        Logged Out for Today
+                      </span>
+                    ) : (
+                      <button
+                        onClick={handleCheckIn}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl px-5 py-3 transition-colors shadow-lg shadow-emerald-600/15"
+                      >
+                        Check In
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <StatCard
+                    title="Working Hours"
+                    value={`${summaryStats.workHours} hrs`}
+                    subtext="Cumulative active shift time"
+                    colorClass="text-indigo-400"
+                  />
+                  <StatCard
+                    title="Extra Hours (OT)"
+                    value={`${summaryStats.extraHours} hrs`}
+                    subtext="Overtime hours (>8 hr shifts)"
+                    colorClass="text-purple-400"
+                  />
+                  <StatCard
+                    title="Present Days"
+                    value={summaryStats.presentCount}
+                    subtext="Total logs checked-in"
+                    colorClass="text-emerald-400"
+                  />
+                  <StatCard
+                    title="Leaves Logged"
+                    value={summaryStats.leaveCount}
+                    subtext="Approved leave logs this month"
+                    colorClass="text-rose-400"
+                  />
+                </div>
               </div>
             )}
 
