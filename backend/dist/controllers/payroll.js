@@ -15,7 +15,7 @@ const getMyOrAllPayroll = async (req, res) => {
     }
     try {
         let payrolls;
-        if (req.user.role === 'Admin' || req.user.role === 'HR') {
+        if (req.user.role === 'Admin') {
             payrolls = await payroll_js_1.default.find()
                 .populate('employee', 'firstName lastName email loginId')
                 .sort({ year: -1, month: -1 });

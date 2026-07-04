@@ -13,7 +13,7 @@ export const getMyOrAllPayroll = async (req: AuthRequest, res: Response) => {
 
   try {
     let payrolls;
-    if (req.user.role === 'Admin' || req.user.role === 'HR') {
+    if (req.user.role === 'Admin') {
       payrolls = await Payroll.find()
         .populate('employee', 'firstName lastName email loginId')
         .sort({ year: -1, month: -1 });

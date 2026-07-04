@@ -30,7 +30,7 @@ app.use('/uploads', express.static(path.resolve('uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
-app.use('/api/profiles', profileRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leaves', leaveRoutes);
 app.use('/api/payroll', payrollRoutes);

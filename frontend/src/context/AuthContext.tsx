@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import api from '../services/api.js';
 
-export type UserRole = 'Admin' | 'HR' | 'HR Officer' | 'Manager' | 'Employee';
+export type UserRole = 'Admin' | 'HR' | 'Employee';
 
 export interface UserPayload {
   id: string;

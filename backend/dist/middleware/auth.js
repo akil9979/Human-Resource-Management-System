@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.roleMiddleware = exports.authMiddleware = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const VALID_ROLES = ['Admin', 'HR', 'Manager', 'Employee'];
 const getCookieValue = (cookieHeader, name) => {
     if (!cookieHeader) {
         return undefined;
@@ -20,15 +21,18 @@ const authMiddleware = (req, res, next) => {
     const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
     const cookieToken = getCookieValue(req.headers.cookie, 'hrms_auth');
     const token = bearerToken || cookieToken;
+    const secret = process.env.JWT_SECRET;
     if (!token) {
         return res.status(401).json({ status: 'error', message: 'Access denied: No token provided' });
     }
+    if (!secret) {
+        return res.status(500).json({ status: 'error', message: 'Authentication is not configured on the server' });
+    }
     try {
-        const secret = process.env.JWT_SECRET;
-        if (!secret) {
-            throw new Error('JWT_SECRET is not configured on the server');
-        }
         const decoded = jsonwebtoken_1.default.verify(token, secret);
+        if (!decoded.id || !decoded.email || !decoded.role || !VALID_ROLES.includes(decoded.role)) {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized: Invalid token payload' });
+        }
         req.user = {
             id: decoded.id,
             email: decoded.email,

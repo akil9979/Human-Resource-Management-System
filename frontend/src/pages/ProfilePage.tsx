@@ -105,7 +105,7 @@ export const ProfilePage: React.FC = () => {
     setUploading(true);
     try {
       const uId = profileData.user?._id || profileData.user;
-      const response = await api.post(`/profiles/${uId}/avatar`, formData, {
+      const response = await api.post(`/profile/${uId}/avatar`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

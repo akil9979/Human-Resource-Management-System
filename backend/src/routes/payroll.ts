@@ -7,8 +7,8 @@ const router = Router();
 // Apply authMiddleware globally to all payroll requests
 router.use(authMiddleware);
 
-router.get('/', getMyOrAllPayroll);
-router.post('/', roleMiddleware('Admin', 'HR'), createPayroll);
-router.put('/:id', roleMiddleware('Admin', 'HR'), updatePayroll);
+router.get('/', roleMiddleware('Admin', 'Employee'), getMyOrAllPayroll);
+router.post('/', roleMiddleware('Admin'), createPayroll);
+router.put('/:id', roleMiddleware('Admin'), updatePayroll);
 
 export default router;

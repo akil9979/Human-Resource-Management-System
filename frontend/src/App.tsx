@@ -13,6 +13,7 @@ import AppLayout from './layouts/AppLayout';
 import AdminLayout from './layouts/AdminLayout';
 import EmployeeLayout from './layouts/EmployeeLayout';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RoleProtectedRoute from './routes/RoleProtectedRoute';
 
 // ── Lazy-loaded pages (code splitting) ────────────────────────────────────────
 const LoginPage      = lazy(() => import('./pages/LoginPage'));
@@ -413,7 +414,14 @@ function App() {
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="leaves" element={<LeavesPage />} />
-          <Route path="payroll" element={<PayrollPage />} />
+          <Route
+            path="payroll"
+            element={
+              <RoleProtectedRoute allowedRoles={['Admin']}>
+                <PayrollPage />
+              </RoleProtectedRoute>
+            }
+          />
         </Route>
 
         {/* Shared protected detail routes */}

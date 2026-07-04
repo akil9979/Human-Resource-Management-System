@@ -4,8 +4,8 @@ import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
-// Endpoint to search and list employees (accessible by authenticated users)
-router.get('/', authMiddleware, searchEmployees);
+// Endpoint restricted to Admin and HR users
+router.get('/', authMiddleware, roleMiddleware('Admin', 'HR'), searchEmployees);
 
 // Endpoint restricted to Admin and HR users
 router.post('/', authMiddleware, roleMiddleware('Admin', 'HR'), createEmployee);

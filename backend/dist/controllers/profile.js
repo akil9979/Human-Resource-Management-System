@@ -12,6 +12,17 @@ const getProfile = async (req, res) => {
     if (!userId) {
         return res.status(400).json({ status: 'error', message: 'User ID parameter is required' });
     }
+    if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
+    }
+    const isSelf = req.user.id === userId;
+    const canManageProfiles = req.user.role === 'Admin' || req.user.role === 'HR';
+    if (!canManageProfiles && !isSelf) {
+        return res.status(403).json({
+            status: 'error',
+            message: 'Forbidden: You do not have permission to view other employee profiles',
+        });
+    }
     try {
         const profile = await employeeProfile_js_1.default.findOne({ user: userId }).populate('user', 'email role loginId');
         if (!profile) {
@@ -32,10 +43,10 @@ const updateProfile = async (req, res) => {
     if (!req.user) {
         return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
     }
-    // Permission checks: Non-Admin can only update their own profile
+    // Permission checks: Employee can only update their own profile; Admin/HR can manage employee profiles
     const isSelf = req.user.id === userId;
-    const isAdmin = req.user.role === 'Admin';
-    if (!isAdmin && !isSelf) {
+    const canManageProfiles = req.user.role === 'Admin' || req.user.role === 'HR';
+    if (!canManageProfiles && !isSelf) {
         return res.status(403).json({
             status: 'error',
             message: 'Forbidden: You do not have permission to modify other employee files',
@@ -43,8 +54,8 @@ const updateProfile = async (req, res) => {
     }
     try {
         let updateData = {};
-        if (isAdmin) {
-            // Admin can update all fields
+        if (canManageProfiles) {
+            // Admin/HR can update all profile fields
             updateData = { ...req.body };
             // Prevent modification of read-only system linkages
             delete updateData.user;
@@ -90,10 +101,10 @@ const uploadAvatar = async (req, res) => {
     if (!req.user) {
         return res.status(401).json({ status: 'error', message: 'Unauthorized: User session not found' });
     }
-    // Permission check: Admins or the user themselves
+    // Permission check: Admin/HR or the user themselves
     const isSelf = req.user.id === userId;
-    const isAdmin = req.user.role === 'Admin';
-    if (!isAdmin && !isSelf) {
+    const canManageProfiles = req.user.role === 'Admin' || req.user.role === 'HR';
+    if (!canManageProfiles && !isSelf) {
         // If a file was uploaded by multer, clean it up immediately
         if (req.file) {
             try {

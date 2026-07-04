@@ -1,9 +1,11 @@
 import { Request } from 'express';
 
+export type AuthRole = 'Admin' | 'HR' | 'Manager' | 'Employee';
+
 export interface AuthUser {
   id: string;
   email: string;
-  role: 'Admin' | 'HR' | 'Manager' | 'Employee';
+  role: AuthRole;
 }
 
 export interface AuthRequest extends Request {

@@ -1,6 +1,14 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { AuthRequest } from '../types/express.js';
+import { AuthRequest, AuthRole } from '../types/express.js';
+
+const VALID_ROLES: AuthRole[] = ['Admin', 'HR', 'Manager', 'Employee'];
+
+interface JwtUserPayload {
+  id?: string;
+  email?: string;
+  role?: AuthRole;
+}
 
 const getCookieValue = (cookieHeader: string | undefined, name: string): string | undefined => {
   if (!cookieHeader) {
@@ -19,18 +27,22 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
   const cookieToken = getCookieValue(req.headers.cookie, 'hrms_auth');
   const token = bearerToken || cookieToken;
+  const secret = process.env.JWT_SECRET;
 
   if (!token) {
     return res.status(401).json({ status: 'error', message: 'Access denied: No token provided' });
   }
 
-  try {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new Error('JWT_SECRET is not configured on the server');
-    }
+  if (!secret) {
+    return res.status(500).json({ status: 'error', message: 'Authentication is not configured on the server' });
+  }
 
-    const decoded = jwt.verify(token, secret) as any;
+  try {
+    const decoded = jwt.verify(token, secret) as JwtUserPayload;
+
+    if (!decoded.id || !decoded.email || !decoded.role || !VALID_ROLES.includes(decoded.role)) {
+      return res.status(401).json({ status: 'error', message: 'Unauthorized: Invalid token payload' });
+    }
     
     req.user = {
       id: decoded.id,
@@ -44,7 +56,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-export const roleMiddleware = (...allowedRoles: ('Admin' | 'HR' | 'Manager' | 'Employee')[]) => {
+export const roleMiddleware = (...allowedRoles: AuthRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ status: 'error', message: 'Unauthorized: Access credentials missing' });
